@@ -72,7 +72,7 @@ class TestCli:
 
     def test_version(self, cli):
         r = cli("--version")
-        assert r.returncode == 0 and r.stdout.startswith("pawk ")
+        assert r.returncode == 0 and r.stdout.startswith("pawk-ng ")
 
     def test_no_program(self, cli):
         r = cli()
@@ -103,14 +103,14 @@ class TestCli:
         import sys
         f = tmp_path / "bin"
         f.write_bytes(b"a\xff b\n")
-        r = subprocess.run([sys.executable, "-m", "pawk", "{ print($1) }", str(f)],
+        r = subprocess.run([sys.executable, "-m", "pawk_ng", "{ print($1) }", str(f)],
                            capture_output=True)
         assert r.stdout == b"a\xff\n"
 
     def test_crlf_preserved_in_last_field(self):
         import subprocess
         import sys
-        r = subprocess.run([sys.executable, "-m", "pawk", "{ print($2) }"],
+        r = subprocess.run([sys.executable, "-m", "pawk_ng", "{ print($2) }"],
                            input=b"a b\r\n", capture_output=True)
         assert r.stdout == b"b\r\n"
 
@@ -124,7 +124,7 @@ class TestCli:
         import subprocess
         import sys
         p = subprocess.run(
-            f"{sys.executable} -m pawk 'BEGIN {{ for i in range(100000): print(i) }}' | head -1",
+            f"{sys.executable} -m pawk_ng 'BEGIN {{ for i in range(100000): print(i) }}' | head -1",
             shell=True, capture_output=True, text=True)
         assert p.stdout == "0\n" and "Traceback" not in p.stderr
 

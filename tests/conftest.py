@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import pawk
+import pawk_ng as pawk
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -32,7 +32,7 @@ def status_awk():
 def cli():
     """cli(*args, stdin="") -> CompletedProcess from a real subprocess."""
     def go(*args, stdin="", cwd=None, env=None):
-        return subprocess.run([sys.executable, "-m", "pawk", *args], input=stdin,
+        return subprocess.run([sys.executable, "-m", "pawk_ng", *args], input=stdin,
                               capture_output=True, text=True, cwd=cwd or ROOT,
                               env=env, timeout=30)
     return go

@@ -94,7 +94,7 @@ class TestExitAndNext:
         assert run_awk(prog, operands=[str(a), str(b)]) == "a1\nb1\n"
 
     def test_next_in_begin_is_an_error(self, status_awk):
-        import pawk
+        import pawk_ng as pawk
         with pytest.raises(pawk.PawkError):
             status_awk("BEGIN { next }")
 
@@ -187,7 +187,7 @@ class TestVariables:
 
     def test_argv_argc(self, run_awk):
         out = run_awk("BEGIN { print(ARGC, ARGV[0], ARGV[1]) }", operands=["f1"])
-        assert out == "2 pawk f1\n"
+        assert out == "2 pawk-ng f1\n"
 
     def test_argv_can_be_edited_in_begin(self, run_awk, tmp_path):
         f = tmp_path / "f"
@@ -310,12 +310,12 @@ class TestPython:
         assert run_awk("{ print($2, $1); n = NF } END { print(n) }", "a b\n") == "b a\n2\n"
 
     def test_runtime_error_is_wrapped_with_context(self, status_awk):
-        import pawk
+        import pawk_ng as pawk
         with pytest.raises(pawk.PawkError, match=r"NameError.*record 1"):
             status_awk("{ print(undefined_name) }", "x\n")
 
     def test_runtime_error_in_pattern(self, status_awk):
-        import pawk
+        import pawk_ng as pawk
         with pytest.raises(pawk.PawkError, match="ZeroDivisionError"):
             status_awk("1/0 { }", "x\n")
 
@@ -345,7 +345,7 @@ class TestImplicitVariables:
         assert run_awk(prog, "x\ny\n") == "False True\n"
 
     def test_never_assigned_name_is_still_a_name_error(self, status_awk):
-        import pawk
+        import pawk_ng as pawk
         with pytest.raises(pawk.PawkError, match="NameError"):
             status_awk("BEGIN { print(typo) }")
 

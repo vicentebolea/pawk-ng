@@ -1,7 +1,7 @@
 """Unit tests for the program parser and the awk-to-Python rewriting."""
 import pytest
 
-from pawk.parser import ProgramError, parse, tokenize, translate
+from pawk_ng.parser import ProgramError, parse, tokenize, translate
 
 
 def tr(src):

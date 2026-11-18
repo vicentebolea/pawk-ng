@@ -176,7 +176,7 @@ class Runtime:
             "FS": " ", "OFS": " ", "RS": "\n", "ORS": "\n", "NF": 0, "NR": 0,
             "FNR": 0, "FILENAME": "", "SUBSEP": "\x1c", "OFMT": "%.6g",
             "ENVIRON": {k: Field(v) for k, v in env.items()},
-            "ARGV": ["pawk"] + list(operands), "ARGC": 1 + len(operands),
+            "ARGV": ["pawk-ng"] + list(operands), "ARGC": 1 + len(operands),
         })
         ns.assigned = frozenset().union(*(r.assigned for r in self.rules))
         ns.arrays = frozenset().union(*(r.arrays for r in self.rules))
@@ -221,7 +221,7 @@ class Runtime:
                     f = open(arg, encoding="utf-8", errors="surrogateescape",
                              newline="\n")
                 except OSError as e:
-                    self.stderr.write("pawk: cannot open %s (%s)\n" % (arg, e.strerror))
+                    self.stderr.write("pawk-ng: cannot open %s (%s)\n" % (arg, e.strerror))
                     self.status = 2
                     continue
             self.ns["FILENAME"], self.ns["FNR"] = arg, 0

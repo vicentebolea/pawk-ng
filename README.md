@@ -1,4 +1,4 @@
-# pawk
+# pawk-ng
 
 An awk-style stream editor where the patterns and actions are plain Python 3.
 You keep awk's execution model (`BEGIN`, `END`, pattern/action rules, range
@@ -9,40 +9,40 @@ and drop awk's function library: you call Python (`len`, `str` methods, `re`,
 ## One-liners
 
 ```sh
-pawk '{ print($0) }' file                                          # cat
-pawk '{ print($1) }' file                                          # first column
-pawk '{ print($NF, $1) }' file                                     # last column, then first
-pawk '{ print(NR, $0) }' file                                      # number the lines
-pawk 'NR == 2' file                                                # second line
-pawk 'NR == 1, NR == 3' file                                       # lines 1 to 3
-pawk '$2 > 28' file                                                # numeric comparison on a column
-pawk '$3 == "NY"' file                                             # string comparison on a column
-pawk '/NY$/' file                                                  # lines matching a regex
-pawk '!/NY/' file                                                  # lines not matching
-pawk 'NF' file                                                     # drop empty lines
-pawk 'END { print(NR) }' file                                      # count lines
-pawk '{ print(NF) }' file                                          # fields per line
-pawk '{ print($1, $2 * 2) }' file                                  # arithmetic on a column
-pawk '{ s += $2 } END { print(s) }' file                           # sum a column
-pawk '{ s += $2 } END { print(s / NR) }' file # average a column   # 
-pawk '{ print(len($1), $1.upper()) }' file                         # Python len() and str methods
-pawk '{ print($1[:2]) }' file                                      # Python slicing
-pawk '{ print($NF.lower()) }' file                                 # lowercase the last column
-pawk '{ $2 = ""; print($0) }' file                                 # blank out a column
-pawk '{ $0 = re.sub("o", "0", $0); print($0) }' file               # substitute with re
-pawk -v n=2 'NR == n' file                                         # pass a variable
-pawk -F: '{ print($1) }' /etc/passwd                               # field separator
-pawk 'BEGIN { OFS = "," } { $1 = $1; print($0) }' file             # space to comma
-pawk '{ print(*reversed($0.split())) }' file # reverse the fields  # 
-pawk '{ n[$3] += 1 } END { print(dict(n)) }' file                  # count by column
-pawk 'BEGIN { print(2 ** 10, len("hello")) }' # no input needed    # 
-pawk '{ print(f"{F[1]:>8}|{int(F[2]):4d}") }' file                 # f-string formatting
+pawk-ng '{ print($0) }' file                                          # cat
+pawk-ng '{ print($1) }' file                                          # first column
+pawk-ng '{ print($NF, $1) }' file                                     # last column, then first
+pawk-ng '{ print(NR, $0) }' file                                      # number the lines
+pawk-ng 'NR == 2' file                                                # second line
+pawk-ng 'NR == 1, NR == 3' file                                       # lines 1 to 3
+pawk-ng '$2 > 28' file                                                # numeric comparison on a column
+pawk-ng '$3 == "NY"' file                                             # string comparison on a column
+pawk-ng '/NY$/' file                                                  # lines matching a regex
+pawk-ng '!/NY/' file                                                  # lines not matching
+pawk-ng 'NF' file                                                     # drop empty lines
+pawk-ng 'END { print(NR) }' file                                      # count lines
+pawk-ng '{ print(NF) }' file                                          # fields per line
+pawk-ng '{ print($1, $2 * 2) }' file                                  # arithmetic on a column
+pawk-ng '{ s += $2 } END { print(s) }' file                           # sum a column
+pawk-ng '{ s += $2 } END { print(s / NR) }' file # average a column   # 
+pawk-ng '{ print(len($1), $1.upper()) }' file                         # Python len() and str methods
+pawk-ng '{ print($1[:2]) }' file                                      # Python slicing
+pawk-ng '{ print($NF.lower()) }' file                                 # lowercase the last column
+pawk-ng '{ $2 = ""; print($0) }' file                                 # blank out a column
+pawk-ng '{ $0 = re.sub("o", "0", $0); print($0) }' file               # substitute with re
+pawk-ng -v n=2 'NR == n' file                                         # pass a variable
+pawk-ng -F: '{ print($1) }' /etc/passwd                               # field separator
+pawk-ng 'BEGIN { OFS = "," } { $1 = $1; print($0) }' file             # space to comma
+pawk-ng '{ print(*reversed($0.split())) }' file # reverse the fields  # 
+pawk-ng '{ n[$3] += 1 } END { print(dict(n)) }' file                  # count by column
+pawk-ng 'BEGIN { print(2 ** 10, len("hello")) }' # no input needed    # 
+pawk-ng '{ print(f"{F[1]:>8}|{int(F[2]):4d}") }' file                 # f-string formatting
 ```
 
 ## Usage
 
 ```sh
-pawk [-F fs] [-v var=val] [-m module] [-f progfile] 'program' [file ...]
+pawk-ng [-F fs] [-v var=val] [-m module] [-f progfile] 'program' [file ...]
 ```
 
 A program can be a file (`-f report.pawk`) that mixes rules with ordinary
@@ -67,7 +67,7 @@ END {
 ```
 
 ```sh
-pawk -f report.pawk people.txt
+pawk-ng -f report.pawk people.txt
 ```
 
 ## Language

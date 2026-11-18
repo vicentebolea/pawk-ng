@@ -1,7 +1,7 @@
 """Unit tests: numeric strings, conversions, regex translation, splitting."""
 import pytest
 
-from pawk.values import Field, looks_numeric, regex, split_text, to_num, to_str
+from pawk_ng.values import Field, looks_numeric, regex, split_text, to_num, to_str
 
 
 @pytest.mark.parametrize("s,exp", [
@@ -155,7 +155,7 @@ class TestDefaultSplitting:
 
 class TestUninit:
     def test_acts_as_empty_string_and_zero(self):
-        from pawk.values import Uninit
+        from pawk_ng.values import Uninit
         u = Uninit()
         assert u == "" and u == 0 and not u and u + 1 == 1 and u + "x" == "x"
         assert u < 1 and u > -1 and u == Field("0") and u != Field("a")

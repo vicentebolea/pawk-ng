@@ -3,8 +3,8 @@ import io
 
 import pytest
 
-import pawk
-from pawk.runtime import Record, RecordReader, Runtime, unescape
+import pawk_ng as pawk
+from pawk_ng.runtime import Record, RecordReader, Runtime, unescape
 
 
 def reader(text):
