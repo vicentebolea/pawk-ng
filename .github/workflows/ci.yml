@@ -26,3 +26,36 @@ jobs:
         run: python -m pip install pytest .
       - name: Run tests
         run: python -m pytest -v
+
+  publish-testpypi:
+    name: Publish dev build to TestPyPI
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/pawk-ng/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Make the version unique for this run
+        run: |
+          sed -i -E "s/^version = \"([^\"]+)\"/version = \"\1.dev${GITHUB_RUN_NUMBER}\"/" pyproject.toml
+          sed -i -E "s/^__version__ = \"([^\"]+)\"/__version__ = \"\1.dev${GITHUB_RUN_NUMBER}\"/" pawk_ng/__init__.py
+          grep -n "^version\|^__version__" pyproject.toml pawk_ng/__init__.py
+
+      - name: Build sdist and wheel
+        run: python -m pip install build && python -m build
+
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
