@@ -40,7 +40,7 @@ class TestCli:
         assert r.stdout == "4 hi\tthere\n"
 
     def test_dash_v_value_is_strnum(self, cli):
-        assert cli("-v", "n=10", "BEGIN { print(n > 9) }").stdout == "1\n"
+        assert cli("-v", "n=10", "BEGIN { print(n > 9) }").stdout == "True\n"
 
     def test_dash_v_requires_equals(self, cli):
         r = cli("-v", "oops", "BEGIN{}")
@@ -64,7 +64,7 @@ class TestCli:
 
     def test_dash_m_imports_names(self, cli):
         r = cli("-m", "math", "BEGIN { print(floor(2.7), pi > 3) }")
-        assert r.stdout == "2 1\n"
+        assert r.stdout == "2 True\n"
 
     def test_exit_status_propagates(self, cli):
         assert cli("BEGIN { exit 42 }").returncode == 42
@@ -258,7 +258,7 @@ EQUIVALENT = [
     ("{ $0 = re.sub('[aeiou]', '<\\\\g<0>>', $0); print }", "{ gsub(/[aeiou]/, \"<&>\"); print }"),
     ("$2 > $3 || $1 < 'c' { print }", "$2 > $3 || $1 < \"c\" { print }"),
     ("END { print($0, NF) }", "END { print $0, NF }"),
-    ("BEGIN { print(1/3, 7/2, 2**10, 10 % 3) }", "BEGIN { print 1/3, 7/2, 2^10, 10 % 3 }"),
+    ("BEGIN { print(7 // 2, 2**10, 10 % 3) }", "BEGIN { print int(7/2), 2^10, 10 % 3 }"),
     ("{ m = re.search('a+', $0); print(m.start() + 1 if m else 0) }",
      "{ print match($0, /a+/) }"),
 ]

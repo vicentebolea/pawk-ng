@@ -39,7 +39,7 @@ class TestTranslate:
         ("next", "next()"), ("nextfile", "nextfile()"), ("exit", "exit()"),
         ("exit 3", "exit(3)"), ("exit code", "exit(code)"), ("next()", "next()"),
         ("exit(2)", "exit(2)"), ("x.next", "x.next"), ("next = 3", "next = 3"),
-        ("print", "print()"), ("print $1, $2", "print(F[1], F[2])"),
+        ("print", "print(F[0])"), ("print $1, $2", "print(F[1], F[2])"),
         ("print(1)", "print(1)"), ("printf 1", "printf 1"),
         ("print 1; print 2", "print(1); print(2)"), ("print a, (b, c)", "print(a, (b, c))"),
     ])

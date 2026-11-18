@@ -208,7 +208,7 @@ def translate(toks):
             out.append("re.search(%r, F[0])" % t)
         elif kind == "word" and t == "print" and _bare(toks, k, out):
             e = _stmt_end(toks, k + 1)
-            out.append("%s(%s)" % (t, translate(toks[k + 1:e]).strip()))
+            out.append("print(%s)" % (translate(toks[k + 1:e]).strip() or "F[0]"))
             k = e
             continue
         elif kind == "word" and t in ("next", "nextfile", "exit"):

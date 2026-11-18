@@ -8,41 +8,67 @@ and drop awk's function library: you call Python (`len`, `str` methods, `re`,
 
 ## One-liners
 
-    pawk '{ print }' file                        # cat
-    pawk '{ print $1 }' file                     # first column
-    pawk '{ print $NF, $1 }' file                # last column, then first
-    pawk '{ print NR, $0 }' file                 # number the lines
-    pawk 'NR == 2' file                          # second line
-    pawk 'NR == 1, NR == 3' file                 # lines 1 to 3
-    pawk '$2 > 28' file                          # numeric comparison on a column
-    pawk '$3 == "NY"' file                       # string comparison on a column
-    pawk '/NY$/' file                            # lines matching a regex
-    pawk '!/NY/' file                            # lines not matching
-    pawk 'NF' file                               # drop empty lines
-    pawk 'END { print NR }' file                 # count lines
-    pawk '{ print NF }' file                     # fields per line
-    pawk '{ print $1, $2 * 2 }' file             # arithmetic on a column
-    pawk '{ s += $2 } END { print s }' file      # sum a column
-    pawk '{ s += $2 } END { print s / NR }' file # average a column
-    pawk '{ print len($1), $1.upper() }' file    # Python len() and str methods
-    pawk '{ print $1[:2] }' file                 # Python slicing
-    pawk '{ print $NF.lower() }' file            # lowercase the last column
-    pawk '{ $2 = ""; print }' file               # blank out a column
-    pawk '{ $0 = re.sub("o", "0", $0); print }' file   # substitute with re
-    pawk -v n=2 'NR == n' file                   # pass a variable
-    pawk -F: '{ print $1 }' /etc/passwd          # field separator
-    pawk 'BEGIN { OFS = "," } { $1 = $1; print }' file  # space to comma
-    pawk '{ print(*reversed($0.split())) }' file # reverse the fields
-    pawk '{ n[$3] += 1 } END { print dict(n) }' file    # count by column
-    pawk 'BEGIN { print 2 ** 10, len("hello") }' # no input needed
-    pawk '{ print(f"{F[1]:>8}|{int(F[2]):4d}") }' file  # f-string formatting
+```sh
+pawk '{ print }' file                        # cat
+pawk '{ print $1 }' file                     # first column
+pawk '{ print $NF, $1 }' file                # last column, then first
+pawk '{ print NR, $0 }' file                 # number the lines
+pawk 'NR == 2' file                          # second line
+pawk 'NR == 1, NR == 3' file                 # lines 1 to 3
+pawk '$2 > 28' file                          # numeric comparison on a column
+pawk '$3 == "NY"' file                       # string comparison on a column
+pawk '/NY$/' file                            # lines matching a regex
+pawk '!/NY/' file                            # lines not matching
+pawk 'NF' file                               # drop empty lines
+pawk 'END { print NR }' file                 # count lines
+pawk '{ print NF }' file                     # fields per line
+pawk '{ print $1, $2 * 2 }' file             # arithmetic on a column
+pawk '{ s += $2 } END { print s }' file      # sum a column
+pawk '{ s += $2 } END { print s / NR }' file # average a column
+pawk '{ print len($1), $1.upper() }' file    # Python len() and str methods
+pawk '{ print $1[:2] }' file                 # Python slicing
+pawk '{ print $NF.lower() }' file            # lowercase the last column
+pawk '{ $2 = ""; print }' file               # blank out a column
+pawk '{ $0 = re.sub("o", "0", $0); print }' file   # substitute with re
+pawk -v n=2 'NR == n' file                   # pass a variable
+pawk -F: '{ print $1 }' /etc/passwd          # field separator
+pawk 'BEGIN { OFS = "," } { $1 = $1; print }' file  # space to comma
+pawk '{ print(*reversed($0.split())) }' file # reverse the fields
+pawk '{ n[$3] += 1 } END { print dict(n) }' file    # count by column
+pawk 'BEGIN { print 2 ** 10, len("hello") }' # no input needed
+pawk '{ print(f"{F[1]:>8}|{int(F[2]):4d}") }' file  # f-string formatting
+```
 
 ## Usage
 
-    pawk [-F fs] [-v var=val] [-m module] [-f progfile] 'program' [file ...]
+```sh
+pawk [-F fs] [-v var=val] [-m module] [-f progfile] 'program' [file ...]
+```
 
-    def total(): return sum(F)          # top-level Python is allowed
-    NR == 1, /stop/ && !/skip/ { print $1, total(); next }
+A program can be a file (`-f report.pawk`) that mixes rules with ordinary
+Python definitions and imports:
+
+```python
+import collections
+
+def top(counts, n=3):
+    return counts.most_common(n)
+
+BEGIN { counts = collections.Counter() }
+
+$3 != "" && !/^#/ {
+    counts[$3] += 1
+}
+
+END {
+    for city, n in top(counts):
+        print(city, n)
+}
+```
+
+```sh
+pawk -f report.pawk people.txt
+```
 
 ## Language
 
@@ -64,10 +90,14 @@ and drop awk's function library: you call Python (`len`, `str` methods, `re`,
   strings (`"a" + $1`). Unassigned variables read as `""`/`0`, and subscripted
   names (`n[$3] += 1`) become dicts automatically. A name that is never
   assigned is still a `NameError`.
-* **Output.** `print(*args, sep=OFS, end=ORS, file=stdout)` is Python's print
-  with awk defaults: no arguments prints `$0`, and floats use `OFMT`. For
-  files, pipes and commands use `open(...)` and `subprocess`; call
-  `sys.stdout.flush()` before running a command that writes to the same output.
+* **Output.** `print` is Python's builtin `print`: `sep`, `end` and `file`
+  work as usual and numbers print the Python way (`print(6 / 3)` is `2.0`).
+  The only sugar is that a bare `print` prints `$0` and `print $1, $2` means
+  `print(F[1], F[2])`. `OFS` is applied when a record is rebuilt after you
+  assign a field or `NF`, `OFMT` formats floats assigned to fields, and `ORS`
+  is only a variable: pass it yourself (`print(x, end=ORS)`) if you want it.
+  Files, pipes and commands are `open(...)` and `subprocess`; call
+  `sys.stdout.flush()` before a command that writes to the same output.
 * `exit` in BEGIN skips input but runs END (as in POSIX awk).
 * Not provided on purpose: awk's `length`, `substr`, `split`, `sub`, `gsub`,
   `match`, `printf`, `sprintf`, `getline`, `system`, `close`, `RSTART`,
@@ -75,8 +105,10 @@ and drop awk's function library: you call Python (`len`, `str` methods, `re`,
 
 ## Tests
 
-    python -m pytest              # unit, contract and integration
-    python -m pytest -m contract
+```sh
+python -m pytest              # unit, contract and integration
+python -m pytest -m contract
+```
 
 Integration tests also compare against the system `gawk`/`awk` when present.
 

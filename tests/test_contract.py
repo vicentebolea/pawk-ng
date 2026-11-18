@@ -128,10 +128,15 @@ class TestVariables:
         assert run_awk("BEGIN{FS='[,;] *'} {print($3)}", "a, b;c\n") == "c\n"
 
     def test_fs_tab_keeps_empty_fields(self, run_awk):
-        assert run_awk("BEGIN{FS='\\t'} {print(NF, $2 == '')}", "a\t\tb\n") == "3 1\n"
+        assert run_awk("BEGIN{FS='\\t'} {print(NF, $2 == '')}", "a\t\tb\n") == "3 True\n"
 
-    def test_ofs_and_ors(self, run_awk):
-        assert run_awk("BEGIN{OFS='-'; ORS='|'} {print($1, $2)}", "a b\nc d\n") == "a-b|c-d|"
+    def test_ofs_applies_when_the_record_is_rebuilt(self, run_awk):
+        assert run_awk("BEGIN{OFS='-'} {$1 = $1; print}", "a b\nc d\n") == "a-b\nc-d\n"
+
+    def test_print_is_pythons_so_ofs_ors_are_opt_in(self, run_awk):
+        assert run_awk("BEGIN{OFS='-'; ORS='|'} {print($1, $2)}", "a b\n") == "a b\n"
+        assert run_awk("BEGIN{OFS='-'; ORS='|'} {print($1, $2, sep=OFS, end=ORS)}",
+                       "a b\n") == "a-b|"
 
     def test_assigning_field_rebuilds_with_ofs(self, run_awk):
         assert run_awk("BEGIN{OFS=':'} {$1 = $1; print}", "a b c\n") == "a:b:c\n"
@@ -178,7 +183,7 @@ class TestVariables:
                        environ={"HOME": "/h"}) == "/h\n"
 
     def test_environ_values_are_numeric_strings(self, run_awk):
-        assert run_awk("BEGIN { print(ENVIRON['N'] > 9) }", environ={"N": "10"}) == "1\n"
+        assert run_awk("BEGIN { print(ENVIRON['N'] > 9) }", environ={"N": "10"}) == "True\n"
 
     def test_argv_argc(self, run_awk):
         out = run_awk("BEGIN { print(ARGC, ARGV[0], ARGV[1]) }", operands=["f1"])
@@ -195,8 +200,9 @@ class TestVariables:
     def test_filename_empty_for_implicit_stdin(self, run_awk):
         assert run_awk("{ print(repr(FILENAME)) }", "x\n") == "''\n"
 
-    def test_ofmt(self, run_awk):
-        assert run_awk("BEGIN { OFMT = '%.2f'; print(3.14159, 2.0, 7) }") == "3.14 2 7\n"
+    def test_ofmt_formats_floats_assigned_to_fields(self, run_awk):
+        assert run_awk("BEGIN { OFMT = '%.2f' } { $2 = 3.14159; $3 = 2.0; print }",
+                       "a b c\n") == "a 3.14 2\n"
 
     def test_no_awk_functions_are_defined(self, run_awk):
         prog = "BEGIN { print([n in globals() for n in ('length', 'substr', 'gsub', 'RSTART')]) }"
@@ -293,13 +299,12 @@ class TestPython:
         assert run_awk("{ print(f'{NF}:' + ','.join(x.upper() for x in F)) }",
                        "a b\n") == "2:A,B\n"
 
-    def test_print_numbers_like_awk(self, run_awk):
+    def test_print_numbers_like_python(self, run_awk):
         assert run_awk("BEGIN { print(1/4, 6/3, 1/3, 10 ** 2, 2 ** 0.5) }") == \
-            "0.25 2 0.333333 100 1.41421\n"
+            "0.25 2.0 0.3333333333333333 100 1.4142135623730951\n"
 
-    def test_python_print_available_through_builtins(self, run_awk, capsys):
-        run_awk("BEGIN { import builtins; builtins.print('real') }")
-        assert capsys.readouterr().out == "real\n"
+    def test_print_is_the_python_builtin(self, run_awk):
+        assert run_awk("BEGIN { import builtins; builtins.print('real') }") == "real\n"
 
     def test_awk_style_statements(self, run_awk):
         assert run_awk("{ print $2, $1; n = NF } END { print n }", "a b\n") == "b a\n2\n"
@@ -319,7 +324,7 @@ class TestImplicitVariables:
     """Awk lets programs use variables and arrays without declaring them."""
 
     def test_uninitialized_is_zero_and_empty(self, run_awk):
-        assert run_awk("BEGIN { print(x + 1, x == 0, x == ''); x = 1 }") == "1 1 1\n"
+        assert run_awk("BEGIN { print(x + 1, x == 0, x == ''); x = 1 }") == "1 True True\n"
 
     def test_accumulate_without_initialization(self, run_awk):
         assert run_awk("{ s += $2 } END { print(s) }", LINES) == "6\n"
@@ -337,7 +342,7 @@ class TestImplicitVariables:
 
     def test_delete_and_membership(self, run_awk):
         prog = "{ a[$1] = 1 } END { del a['x']; print('x' in a, 'y' in a) }"
-        assert run_awk(prog, "x\ny\n") == "0 1\n"
+        assert run_awk(prog, "x\ny\n") == "False True\n"
 
     def test_never_assigned_name_is_still_a_name_error(self, status_awk):
         import pawk

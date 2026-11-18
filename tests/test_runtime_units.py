@@ -141,36 +141,27 @@ class TestRecord:
         assert rt.record[rt.record[1]] == "x"
 
 
-class TestPrint:
-    def out(self, *args, **kw):
-        rt = runtime()
-        rt.ns["OFS"], rt.ns["ORS"] = "-", "|"
-        rt.record.set_text("x y")
-        rt.print_(*args, **kw)
-        return rt.stdout.getvalue()
+class TestStdout:
+    def test_builtin_print_goes_to_the_program_stdout_and_is_restored(self):
+        import sys
+        before = sys.stdout
+        out = io.StringIO()
+        pawk.run("BEGIN { print('hi', 1.0, sep='-') }", stdout=out)
+        assert out.getvalue() == "hi-1.0\n" and sys.stdout is before
 
-    def test_joins_with_ofs_and_ends_with_ors(self):
-        assert self.out("a", "b") == "a-b|"
+    def test_stdout_restored_after_an_error(self):
+        import sys
+        before = sys.stdout
+        with pytest.raises(pawk.PawkError):
+            pawk.run("BEGIN { 1 / 0 }", stdout=io.StringIO())
+        assert sys.stdout is before
 
-    def test_no_arguments_prints_the_record(self):
-        assert self.out() == "x y|"
-
-    def test_sep_and_end_override(self):
-        assert self.out("a", "b", sep="+", end="!") == "a+b!"
-
-    def test_numbers_use_awk_formatting(self):
-        assert self.out(1.0, 0.5, 1 / 3, None, True) == "1-0.5-0.333333--1|"
-
-    def test_ofmt(self):
+    def test_ofmt_used_when_assigning_floats_to_fields(self):
         rt = runtime()
         rt.ns["OFMT"] = "%.2f"
-        rt.print_(3.14159)
-        assert rt.stdout.getvalue() == "3.14\n"
-
-    def test_file_argument(self):
-        rt, f = runtime(), io.StringIO()
-        rt.print_("a", file=f)
-        assert f.getvalue() == "a\n" and rt.stdout.getvalue() == ""
+        rt.record.set_text("x y")
+        rt.record[1] = 3.14159
+        assert str(rt.record) == "3.14 y"
 
 
 class TestNamespace:
@@ -178,12 +169,12 @@ class TestNamespace:
         rt = runtime()
         for name in ("length", "substr", "index", "split", "sub", "gsub", "match",
                      "sprintf", "printf", "tolower", "toupper", "getline", "system",
-                     "close", "RSTART", "RLENGTH"):
+                     "close", "RSTART", "RLENGTH", "print"):
             assert name not in rt.ns
 
     def test_awk_variables_and_statements_present(self):
         rt = runtime()
         for name in ("NR", "NF", "FNR", "FS", "OFS", "RS", "ORS", "FILENAME", "SUBSEP",
-                     "OFMT", "ENVIRON", "ARGV", "ARGC", "F", "print", "next", "exit",
+                     "OFMT", "ENVIRON", "ARGV", "ARGC", "F", "next", "exit",
                      "nextfile"):
             assert name in rt.ns

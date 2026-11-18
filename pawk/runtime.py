@@ -278,7 +278,8 @@ class Runtime:
 
     def _act(self, rule):
         if rule.code is None:
-            self.print_()
+            self.sync_nf()
+            print(self.record.text, file=self.stdout)
         else:
             self._guard(lambda: exec(rule.code, self.ns), rule)
 
@@ -286,6 +287,7 @@ class Runtime:
         begin = [r for r in self.rules if r.kind == "BEGIN"]
         main = [r for r in self.rules if r.kind == "MAIN"]
         end = [r for r in self.rules if r.kind == "END"]
+        real_stdout, sys.stdout = sys.stdout, self.stdout  # builtin print writes here
         try:
             try:
                 for r in self.rules:
@@ -305,6 +307,7 @@ class Runtime:
         except (NextRecord, NextFile):
             raise PawkError("next/nextfile used outside a main rule")
         finally:
+            sys.stdout = real_stdout
             self._cleanup()
         return self.status
 
@@ -334,17 +337,6 @@ class Runtime:
         except Exception:
             pass
 
-    # -- output --------------------------------------------------------
-    def print_(self, *args, sep=None, end=None, file=None):
-        """Python's print, except that sep/end default to OFS/ORS, no
-        arguments prints $0, and numbers use OFMT."""
-        self.sync_nf()
-        ofmt = self.var("OFMT")
-        sep = self.var("OFS") if sep is None else sep
-        end = self.var("ORS") if end is None else end
-        text = sep.join(to_str(a, ofmt) for a in args) if args else self.record.text
-        (self.stdout if file is None else file).write(text + end)
-
     def _exit(self, code=None):
         raise Exit(None if code is None else int(to_num(code)))
 
@@ -356,6 +348,6 @@ class Runtime:
 
     def _install_builtins(self):
         self.ns.update({
-            "print": self.print_, "next": self._next, "nextfile": self._nextfile,
+            "next": self._next, "nextfile": self._nextfile,
             "exit": self._exit, "math": math, "re": re, "os": os, "sys": sys,
         })
