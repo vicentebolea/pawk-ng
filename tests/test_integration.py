@@ -72,7 +72,7 @@ class TestCli:
 
     def test_version(self, cli):
         r = cli("--version")
-        assert r.returncode == 0 and r.stdout.startswith("pawk-ng ")
+        assert r.returncode == 0 and r.stdout.startswith("pawk ")
 
     def test_no_program(self, cli):
         r = cli()

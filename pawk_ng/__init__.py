@@ -1,4 +1,4 @@
-"""pawk-ng: awk's BEGIN/END/pattern-action model with Python 3 as the language."""
+"""pawk: awk's BEGIN/END/pattern-action model with Python 3 as the language."""
 import io
 
 from .parser import ProgramError, parse

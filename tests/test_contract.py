@@ -187,7 +187,7 @@ class TestVariables:
 
     def test_argv_argc(self, run_awk):
         out = run_awk("BEGIN { print(ARGC, ARGV[0], ARGV[1]) }", operands=["f1"])
-        assert out == "2 pawk-ng f1\n"
+        assert out == "2 pawk f1\n"
 
     def test_argv_can_be_edited_in_begin(self, run_awk, tmp_path):
         f = tmp_path / "f"
