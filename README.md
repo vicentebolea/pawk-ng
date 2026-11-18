@@ -69,15 +69,13 @@ pawk 'BEGIN { rows = [] } { rows.append($0) } END { print([r.split()[0] for r in
 Rules can be mixed with ordinary Python (`import`, `def`, `class`):
 
 ```python
-import collections
-
 def top(counts, n=3):
-    return counts.most_common(n)
+    return sorted(counts.items(), key=lambda kv: -kv[1])[:n]
 
-BEGIN { counts = collections.Counter() }
+BEGIN { counts = {} }
 
 $3 != "" && !/^#/ {
-    counts[$3] += 1
+    counts[$3] = counts.get($3, 0) + 1
 }
 
 END {
