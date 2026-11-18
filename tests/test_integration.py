@@ -47,7 +47,7 @@ class TestCli:
         assert r.returncode == 2 and "var=value" in r.stderr
 
     def test_dash_f_program_file(self, cli, tmp_path):
-        prog = tmp_path / "p.pawk"
+        prog = tmp_path / "p.awk"
         prog.write_text("# comment\nBEGIN { n = 0 }\n$2 > 26 { n += 1 }\nEND { print(n) }\n")
         assert cli("-f", str(prog), stdin=DATA).stdout == "3\n"
 

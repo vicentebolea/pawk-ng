@@ -56,7 +56,7 @@ pawk '{ print(f"{F[1]:>8}|{int(F[2]):4d}") }' file      # f-string formatting
 pawk [-F fs] [-v var=val] [-m module] [-f progfile] 'program' [file ...]
 ```
 
-A program can be a file (`-f report.pawk`) that mixes rules with ordinary
+A program can be a file (`-f report.awk`) that mixes rules with ordinary
 Python definitions and imports:
 
 ```python
@@ -78,7 +78,7 @@ END {
 ```
 
 ```sh
-pawk -f report.pawk people.txt
+pawk -f report.awk people.txt
 ```
 
 ## Language
