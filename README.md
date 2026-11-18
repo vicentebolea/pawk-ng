@@ -17,26 +17,38 @@ install both in one environment.
 
 ## Examples
 
+Fields are Python strings, so the whole language is available: methods, slicing,
+`re`, and list/dict/generator comprehensions over `F` (the fields of the line).
+
 ```sh
-pawk '{ print($1) }' file                                # first column
-pawk '{ print($NF, $1) }' file                           # last column, then first
-pawk '{ print(NR, $0) }' file                            # number the lines
-pawk 'NR == 2' file                                      # second line
-pawk 'NR == 1, NR == 3' file                             # lines 1 to 3
-pawk '$2 > 28' file                                      # numeric comparison
-pawk '$3 == "NY"' file                                   # string comparison
-pawk '/NY$/ && !/bob/' file                              # regex patterns
-pawk 'NF' file                                           # drop empty lines
-pawk 'END { print(NR) }' file                            # count lines
-pawk '{ s += $2 } END { print(s / NR) }' file            # average a column
-pawk '{ print(len($1), $1.upper(), $1[:2]) }' file       # Python len, methods, slicing
-pawk '{ $0 = re.sub("o", "0", $0); print($0) }' file     # substitute with re
-pawk '{ $2 = ""; print($0) }' file                       # blank out a column
-pawk -F: '{ print($1) }' /etc/passwd                     # field separator
-pawk -v n=2 'NR == n' file                               # pass a variable
-pawk 'BEGIN { OFS = "," } { $1 = $1; print($0) }' file   # space to comma
-pawk '{ n[$3] += 1 } END { print(dict(n)) }' file        # count by column
-pawk 'BEGIN { print(2 ** 10) }'                          # no input needed
+pawk '{ print($1) }' file                                  # first column
+pawk '{ print($NF, $1) }' file                             # last column, then first
+pawk '{ print(NR, $0) }' file                              # number the lines
+pawk 'NR == 2' file                                        # second line
+pawk 'NR == 1, NR == 3' file                               # lines 1 to 3
+pawk '$2 > 28' file                                        # numeric comparison
+pawk '$3 == "NY"' file                                     # string comparison
+pawk '/NY$/ && !/bob/' file                                # regex patterns
+pawk 'NF' file                                             # drop empty lines
+pawk 'END { print(NR) }' file                              # count lines
+pawk '{ s += $2 } END { print(s / NR) }' file              # average a column
+pawk '{ print(len($1), $1.upper(), $1[:2]) }' file         # Python len, methods, slicing
+pawk '{ $0 = re.sub("o", "0", $0); print($0) }' file       # substitute with re
+pawk '{ $2 = ""; print($0) }' file                         # blank out a column
+pawk -F: '{ print($1) }' /etc/passwd                       # field separator
+pawk -v n=2 'NR == n' file                                 # pass a variable
+pawk 'BEGIN { OFS = "," } { $1 = $1; print($0) }' file     # space to comma
+pawk '{ n[$3] += 1 } END { print(dict(n)) }' file          # count by column
+pawk 'BEGIN { print(2 ** 10) }'                            # no input needed
+
+pawk '{ print([f.upper() for f in F]) }' file              # list comprehension over the fields
+pawk '{ print(sum(int(f) for f in F if f.is_num)) }' file  # generator: sum the numeric fields
+pawk '{ print({f: len(f) for f in F}) }' file              # dict comprehension: field -> length
+pawk '{ print("".join(f[0] for f in F)) }' file            # join: first letter of each field
+# dict comprehension: repeated values
+pawk '{ n[$3] += 1 } END { print({k: v for k, v in n.items() if v > 1}) }' file
+# collect lines, then comprehend
+pawk 'BEGIN { rows = [] } { rows.append($0) } END { print([r.split()[0] for r in rows if "NY" in r]) }' file
 ```
 
 ## `$` and `F`
@@ -72,31 +84,6 @@ Things to know:
   Negative numbers are an error (use `$NF`, not `$-1`).
 * Fields are numeric strings: `$1 > 5` and `$1 + $2` work on numbers when the
   text looks like one, and `$1.upper()` works as a string.
-
-## Comprehensions
-
-Fields are Python strings, so list, dict and generator expressions work
-directly on `F` (the fields of the current line):
-
-```sh
-# list comprehension: uppercase every field
-pawk '{ print([f.upper() for f in F]) }' file
-
-# generator expression: sum the numeric fields of each line
-pawk '{ print(sum(int(f) for f in F if f.is_num)) }' file
-
-# dict comprehension: field -> length
-pawk '{ print({f: len(f) for f in F}) }' file
-
-# join a comprehension: the first letter of each field
-pawk '{ print("".join(f[0] for f in F)) }' file
-
-# filter a dict built across the whole input: values that repeat
-pawk '{ n[$3] += 1 } END { print({k: v for k, v in n.items() if v > 1}) }' file
-
-# collect lines in a list, then comprehend over it at the end
-pawk 'BEGIN { rows = [] } { rows.append($0) } END { print([r.split()[0] for r in rows if "NY" in r]) }' file
-```
 
 ## Programs in a file
 
