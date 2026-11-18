@@ -170,6 +170,11 @@ def _dollar(toks, k):
     raise ProgramError("'$' needs a field number or variable, got %r" % t)
 
 
+def _next_tok(toks, k):
+    j = _next_sig(toks, k)
+    return toks[j] if j < len(toks) else ("nl", "")
+
+
 def _bare(toks, k, out):
     """True when the word at toks[k] is used awk-style, without a call."""
     j = _next_sig(toks, k)
@@ -189,7 +194,7 @@ def translate(toks):
             out.append({"&&": " and ", "||": " or ", "!": " not "}.get(t, t))
         elif kind == "regex":
             out.append("re.search(%r, F[0])" % t)
-        elif kind == "word" and t == "print" and _bare(toks, k, out):
+        elif kind == "word" and t == "print" and _next_tok(toks, k) != ("op", "("):
             raise ProgramError("print is Python's print: write print(...) with parentheses")
         elif kind == "word" and t in ("next", "nextfile", "exit"):
             prev = out[-1] if out else ""

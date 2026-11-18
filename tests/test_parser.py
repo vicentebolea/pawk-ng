@@ -44,13 +44,10 @@ class TestTranslate:
     def test_bare_keywords(self, src, exp):
         assert tr(src) == exp
 
-    @pytest.mark.parametrize("src", ["print", "print $1, $2", "print 1; x = 2"])
+    @pytest.mark.parametrize("src", ["print", "print $1, $2", "print 1; x = 2", "print = 3", "x = print"])
     def test_print_without_parentheses_is_rejected(self, src):
         with pytest.raises(ProgramError, match="print"):
             tr(src)
-
-    def test_print_as_attribute_or_assignment_is_left_alone(self):
-        assert tr("x.print") == "x.print" and tr("print = 3") == "print = 3"
 
     def test_unbalanced_dollar(self):
         with pytest.raises(ProgramError):
