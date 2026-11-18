@@ -95,7 +95,7 @@ class TestCli:
         assert r.returncode == 2 and "cannot read" in r.stderr
 
     def test_unicode_roundtrip(self, cli):
-        assert cli("{ print(length($1), toupper($1)) }", stdin="héllo wörld\n").stdout == \
+        assert cli("{ print(len($1), $1.upper()) }", stdin="héllo wörld\n").stdout == \
             "5 HÉLLO\n"
 
     def test_invalid_utf8_bytes_survive(self, tmp_path):
@@ -132,66 +132,66 @@ class TestCli:
         assert cli("{ print $NF }", stdin="a b c\n").stdout == "c\n"
 
 
-class TestFileIO:
-    def test_print_to_file_truncates_once_then_appends_within_run(self, cli, tmp_path):
+class TestPythonIO:
+    """File, pipe and process I/O is plain Python, not awk redirection."""
+
+    def test_print_to_file_object(self, cli, tmp_path):
         out = tmp_path / "o.txt"
         out.write_text("old\n")
-        cli(f"{{ print($1, to={str(out)!r}) }}", stdin="a\nb\n")
+        cli(f"BEGIN {{ f = open({str(out)!r}, 'w') }}\n{{ print($1, file=f) }}\n"
+            "END { f.close() }", stdin="a\nb\n")
         assert out.read_text() == "a\nb\n"
 
     def test_append_mode(self, cli, tmp_path):
         out = tmp_path / "o.txt"
         out.write_text("old\n")
-        cli(f"{{ print($1, to={str(out)!r}, append=True) }}", stdin="a\n")
+        cli(f"BEGIN {{ f = open({str(out)!r}, 'a') }}\n{{ print($1, file=f) }}\n"
+            "END { f.close() }", stdin="a\n")
         assert out.read_text() == "old\na\n"
 
-    def test_printf_to_file_and_close_then_read_back(self, cli, tmp_path):
+    def test_format_to_file_and_read_back(self, cli, tmp_path):
         out = tmp_path / "o.txt"
-        prog = (f"BEGIN {{ f = {str(out)!r}; printf('%d-%s\\n', 7, 'x', to=f); close(f);"
-                f" print(getline_from(f)) }}")
+        prog = (f"BEGIN {{ f = {str(out)!r}\n"
+                "  with open(f, 'w') as h: h.write('%d-%s\\n' % (7, 'x'))\n"
+                "  print(open(f).read().strip()) }")
         assert cli(prog).stdout == "7-x\n"
 
-    def test_output_pipe(self, cli):
-        r = cli("{ print($1, pipe='sort -r') }\nEND { close('sort -r'); print('done') }",
-                stdin="a\nc\nb\n")
-        assert r.stdout == "c\nb\na\ndone\n"
+    def test_output_through_subprocess_pipe(self, cli):
+        prog = ("import subprocess\n"
+                "BEGIN { p = subprocess.Popen(['sort', '-r'], stdin=subprocess.PIPE, text=True) }\n"
+                "{ print($1, file=p.stdin) }\n"
+                "END { p.stdin.close(); p.wait(); print('done') }")
+        assert cli(prog, stdin="a\nc\nb\n").stdout == "c\nb\na\ndone\n"
 
-    def test_output_pipe_flushed_at_exit(self, cli):
-        assert cli("{ print($1, pipe='cat') }", stdin="a\nb\n").stdout == "a\nb\n"
+    def test_subprocess_exit_status(self, cli):
+        prog = ("import subprocess\n"
+                "BEGIN { p = subprocess.Popen(['sh', '-c', 'cat >/dev/null; exit 3'],"
+                " stdin=subprocess.PIPE); p.stdin.close(); print(p.wait()) }")
+        assert cli(prog).stdout == "3\n"
 
-    def test_close_returns_exit_status_and_minus_one(self, cli):
-        r = cli("BEGIN { print('x', pipe='cat >/dev/null; exit 3'); "
-                "print(close('cat >/dev/null; exit 3'), close('never')) }")
-        assert r.stdout == "3 -1\n"
-
-    def test_getline_from_file_reads_successive_lines(self, cli, datafile):
-        prog = (f"BEGIN {{ f = {str(datafile)!r}\n"
-                "while (l := getline_from(f)) is not None: print(l.split()[0])\n}")
+    def test_read_another_file_while_processing(self, cli, datafile):
+        prog = (f"BEGIN {{ for line in open({str(datafile)!r}): print(line.split()[0]) }}")
         assert cli(prog).stdout == "alice\nbob\ncarol\ndave\n"
 
-    def test_getline_from_missing_file_is_none(self, cli):
-        assert cli("BEGIN { print(getline_from('/nonexistent/x') is None) }").stdout == "1\n"
+    def test_capture_command_output(self, cli):
+        prog = ("import subprocess\nBEGIN { out = subprocess.check_output("
+                "['printf', '1\\\\n2\\\\n'], text=True).split(); print([int(x) * 2 for x in out]) }")
+        assert cli(prog).stdout == "[2, 4]\n"
 
-    def test_getline_cmd(self, cli):
-        prog = ("BEGIN { while (l := getline_cmd('printf \"1\\\\n2\\\\n\"')) is not None: "
-                "print(l * 2) }")
-        assert cli(prog).stdout == "2\n4\n"
+    def test_subprocess_output_ordering_with_flush(self, cli):
+        prog = ("import subprocess\n"
+                "BEGIN { print('a'); sys.stdout.flush(); rc = subprocess.call('echo b; exit 2', shell=True);"
+                " print('c', rc) }")
+        assert cli(prog).stdout == "a\nb\nc 2\n"
 
-    def test_system_orders_output(self, cli):
-        r = cli("BEGIN { print('a'); rc = system('echo b; exit 2'); print('c', rc) }")
-        assert r.stdout == "a\nb\nc 2\n"
+    def test_stderr_goes_to_stderr(self, cli):
+        r = cli("{ print('oops', file=sys.stderr) }", stdin="x\n")
+        assert r.stdout == "" and r.stderr == "oops\n"
 
-    def test_main_getline_consumes_next_record(self, cli):
-        r = cli("NR % 2 { a = $0; getline(); print(a, $0) }", stdin="1\n2\n3\n4\n")
-        assert r.stdout == "1 2\n3 4\n"
-
-    def test_getline_at_eof_returns_zero(self, cli):
-        r = cli("{ print(getline()) }", stdin="1\n")
-        assert r.stdout == "0\n"
-
-    def test_getline_updates_nr_and_fields(self, cli):
-        r = cli("NR == 1 { getline(); print(NR, NF, $1) }", stdin="a\nb c\n")
-        assert r.stdout == "2 2 b\n"
+    def test_environment_and_argv(self, cli, tmp_path):
+        r = cli("BEGIN { print(ENVIRON['PAWK_T'], ARGV[1:]) }", "x=1",
+                env={"PAWK_T": "v", "PATH": __import__("os").environ["PATH"]})
+        assert r.stdout == "v ['x=1']\n"
 
 
 class TestRealWorldPrograms:
@@ -207,7 +207,7 @@ class TestRealWorldPrograms:
 
     def test_max_and_average(self, cli, datafile):
         prog = ("NR == 1 || $2 > mx { mx = $2; who = $1 }\n{ t += $2 }\n"
-                "END { printf('%s %d %.2f\\n', who, mx, t / NR) }")
+                "END { print(f'{who} {mx} {t / NR:.2f}') }")
         assert cli(prog, str(datafile)).stdout == "carol 35 29.50\n"
 
     def test_dedupe_preserving_order(self, cli):
@@ -220,23 +220,19 @@ class TestRealWorldPrograms:
 
     def test_word_frequency_with_counter(self, cli):
         prog = ("import collections\nBEGIN { c = collections.Counter() }\n"
-                "{ c.update(tolower(w) for w in F) }\n"
+                "{ c.update(w.lower() for w in F) }\n"
                 "END { for w, n in c.most_common(2): print(w, n) }")
         assert cli(prog, stdin="a B a\nb A\n").stdout == "a 3\nb 2\n"
 
     def test_gsub_in_place_then_print(self, cli):
-        assert cli("{ gsub('o', '0'); print }", stdin="foo boo\n").stdout == "f00 b00\n"
+        assert cli("{ $0 = re.sub('o', '0', $0); print }", stdin="foo boo\n").stdout == "f00 b00\n"
 
     def test_sub_on_field_variable(self, cli):
-        assert cli("{ $2 = gsub('[0-9]', '#', $2); print }", stdin="a 123\n").stdout == "a ###\n"
-
-    def test_join_with_pipe_to_sort_and_uniq(self, cli):
-        r = cli("{ print($1, pipe='sort | uniq -c') }", stdin="b\na\nb\n")
-        assert [x.split() for x in r.stdout.splitlines()] == [["1", "a"], ["2", "b"]]
+        assert cli("{ $2 = re.sub('[0-9]', '#', $2); print }", stdin="a 123\n").stdout == "a ###\n"
 
     def test_range_extract_block(self, cli):
         text = "x\n[start]\na\nb\n[end]\ny\n"
-        assert cli("/\\[start\\]/, /\\[end\\]/ { if NR > 2 and not matches('end'): print }",
+        assert cli("/\\[start\\]/, /\\[end\\]/ { if NR > 2 and not re.search('end', $0): print }",
                    stdin=text).stdout == "a\nb\n"
 
     def test_empty_and_whitespace_only_lines(self, cli):
@@ -255,15 +251,16 @@ EQUIVALENT = [
     ("BEGIN { OFS = '-' } { $1 = $1; print }", "BEGIN { OFS = \"-\" } { $1 = $1; print }"),
     ("{ NF = 2; print }", "{ NF = 2; print }"),
     ("{ $5 = 'x'; print; print NF }", "{ $5 = \"x\"; print; print NF }"),
-    ("{ print(length($1), toupper($1), substr($1, 2, 3), index($1, 'a')) }",
+    ("{ print(len($1), $1.upper(), $1[1:4], $1.find('a') + 1) }",
      "{ print length($1), toupper($1), substr($1, 2, 3), index($1, \"a\") }"),
-    ("{ printf('%-6s|%5.1f|%03d\\n', $1, $2 / 3, $2) }",
+    ("{ print('%-6s|%5.1f|%03d' % ($1, $2 / 3, int($2))) }",
      "{ printf \"%-6s|%5.1f|%03d\\n\", $1, $2 / 3, $2 }"),
-    ("{ n = gsub('[aeiou]', '<&>'); print(n, $0) }", "{ n = gsub(/[aeiou]/, \"<&>\"); print n, $0 }"),
+    ("{ $0 = re.sub('[aeiou]', '<\\\\g<0>>', $0); print }", "{ gsub(/[aeiou]/, \"<&>\"); print }"),
     ("$2 > $3 || $1 < 'c' { print }", "$2 > $3 || $1 < \"c\" { print }"),
     ("END { print($0, NF) }", "END { print $0, NF }"),
     ("BEGIN { print(1/3, 7/2, 2**10, 10 % 3) }", "BEGIN { print 1/3, 7/2, 2^10, 10 % 3 }"),
-    ("{ print(match($0, 'a+'), RSTART, RLENGTH) }", "{ print match($0, /a+/), RSTART, RLENGTH }"),
+    ("{ m = re.search('a+', $0); print(m.start() + 1 if m else 0) }",
+     "{ print match($0, /a+/) }"),
 ]
 
 

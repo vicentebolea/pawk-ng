@@ -18,6 +18,7 @@ class TestTranslate:
         ("$(NF-1)", "F[(NF-1)]"), ("$$1", "F[F[1]]"), ("$NF-1", "F[NF]-1"),
         ("$a[2]", "F[a[2]]"), ("x = $1 + $2", "x = F[1] + F[2]"),
         ("$(f($1))", "F[(f(F[1]))]"),
+        ("$1.upper()", "F[1].upper()"), ("$1[1:3]", "F[1][1:3]"), ("$x.strip()", "F[x].strip()"),
     ])
     def test_dollar(self, src, exp):
         assert tr(src) == exp
@@ -39,7 +40,7 @@ class TestTranslate:
         ("exit 3", "exit(3)"), ("exit code", "exit(code)"), ("next()", "next()"),
         ("exit(2)", "exit(2)"), ("x.next", "x.next"), ("next = 3", "next = 3"),
         ("print", "print()"), ("print $1, $2", "print(F[1], F[2])"),
-        ("print(1)", "print(1)"), ("printf '%d\\n', 3", "printf('%d\\n', 3)"),
+        ("print(1)", "print(1)"), ("printf 1", "printf 1"),
         ("print 1; print 2", "print(1); print(2)"), ("print a, (b, c)", "print(a, (b, c))"),
     ])
     def test_bare_keywords(self, src, exp):
@@ -95,7 +96,7 @@ class TestRules:
 
     def test_regex_pattern(self):
         (r,) = parse("/a{2}[/]x/ { y = 1 }")
-        assert "matches" in r.source
+        assert "re.search" in r.source
 
     def test_regex_with_brace_and_quote_does_not_confuse_the_parser(self):
         rules = parse("/\"{/ { y = 1 } END { z = 1 }")
@@ -104,11 +105,11 @@ class TestRules:
 
     def test_division_is_not_a_regex(self):
         (r,) = parse("$1 / 2 > 1 / 3 { x = 1 }")
-        assert "matches" not in r.source
+        assert "re.search" not in r.source
 
     def test_negated_regex_and_combination(self):
         (r,) = parse("!/a/ && /b/ or NR > 2")
-        assert r.source.count("matches") == 2 and "not" in r.source
+        assert r.source.count("re.search") == 2 and "not" in r.source
 
     def test_braces_in_action(self):
         (r,) = parse('{ d = {"a": {"b": 1}}; s = "}" }')

@@ -1,11 +1,8 @@
 """Interpreter: records, fields, awk variables and the awk built-ins."""
 import math
 import os
-import random
 import re
-import subprocess
 import sys
-import time
 
 from .parser import parse
 from .values import Field, Uninit, regex, split_text, to_num, to_str
@@ -163,9 +160,6 @@ class Record:
 
 
 class Runtime:
-    SPECIAL = ("FS", "OFS", "RS", "ORS", "NF", "NR", "FNR", "FILENAME", "SUBSEP",
-               "RSTART", "RLENGTH", "OFMT")
-
     def __init__(self, program, operands=(), fs=None, assigns=(), modules=(),
                  stdin=None, stdout=None, stderr=None, environ=None):
         self.rules = parse(program) if isinstance(program, str) else program
@@ -173,17 +167,14 @@ class Runtime:
         self.stdout = stdout if stdout is not None else sys.stdout
         self.stderr = stderr if stderr is not None else sys.stderr
         self.status = 0
-        self.outputs, self.readers, self.procs = {}, {}, {}
         self.active_ranges = {}
         self._reader = None
         self._argi = 1
         self._used_input = False
-        self._seed = 0
         env = os.environ if environ is None else environ
         ns = self.ns = Namespace({
             "FS": " ", "OFS": " ", "RS": "\n", "ORS": "\n", "NF": 0, "NR": 0,
-            "FNR": 0, "FILENAME": "", "SUBSEP": "\x1c", "RSTART": 0,
-            "RLENGTH": -1, "OFMT": "%.6g",
+            "FNR": 0, "FILENAME": "", "SUBSEP": "\x1c", "OFMT": "%.6g",
             "ENVIRON": {k: Field(v) for k, v in env.items()},
             "ARGV": ["pawk"] + list(operands), "ARGC": 1 + len(operands),
         })
@@ -342,202 +333,17 @@ class Runtime:
             self.stdout.flush()
         except Exception:
             pass
-        for name in list(self.outputs) + list(self.readers):
-            self.close(name)
 
     # -- output --------------------------------------------------------
-    def _stream(self, to=None, append=False, pipe=None):
-        if to is None and pipe is None:
-            return self.stdout
-        key = pipe if pipe is not None else to
-        if key not in self.outputs:
-            if pipe is not None:
-                self.stdout.flush()
-                p = subprocess.Popen(pipe, shell=True, stdin=subprocess.PIPE,
-                                     text=True, errors="surrogateescape")
-                self.procs[key] = p
-                self.outputs[key] = p.stdin
-            else:
-                self.outputs[key] = open(to, "a" if append else "w",
-                                         encoding="utf-8", errors="surrogateescape",
-                                         newline="\n")
-        return self.outputs[key]
-
-    def print_(self, *args, to=None, append=False, pipe=None):
+    def print_(self, *args, sep=None, end=None, file=None):
+        """Python's print, except that sep/end default to OFS/ORS, no
+        arguments prints $0, and numbers use OFMT."""
         self.sync_nf()
         ofmt = self.var("OFMT")
-        text = (self.var("OFS").join(to_str(a, ofmt) for a in args)
-                if args else self.record.text)
-        self._stream(to, append, pipe).write(text + self.var("ORS"))
-
-    def printf(self, fmt, *args, to=None, append=False, pipe=None):
-        self._stream(to, append, pipe).write(self.sprintf(fmt, *args))
-
-    _FMT = re.compile(r"%(?:%|([-+ #0]*)(\*|\d+)?(?:\.(\*|\d+))?([diouxXeEfFgGcs]))")
-
-    def sprintf(self, fmt, *args):
-        args = list(args)
-
-        def nxt():
-            return args.pop(0) if args else ""
-
-        def one(m):
-            if m.group() == "%%":
-                return "%"
-            flags, width, prec, conv = m.groups()
-            if width == "*":
-                width = str(int(to_num(nxt())))
-            if prec == "*":
-                prec = str(int(to_num(nxt())))
-            spec = "%" + flags + (width or "") + ("." + prec if prec is not None else "")
-            a = nxt()
-            if conv in "di":
-                return (spec + "d") % int(to_num(a))
-            if conv in "ouxX":
-                return (spec + ("d" if conv == "u" else conv)) % int(to_num(a))
-            if conv in "eEfFgG":
-                return (spec + conv) % float(to_num(a))
-            if conv == "c":
-                numeric = isinstance(a, (int, float)) or (isinstance(a, Field) and a.is_num)
-                return (spec + "s") % (chr(int(to_num(a))) if numeric else to_str(a)[:1])
-            return (spec + "s") % to_str(a, self.var("OFMT"))
-
-        return self._FMT.sub(one, to_str(fmt))
-
-    def close(self, name):
-        name = to_str(name)
-        found, status = False, 0
-        if name in self.outputs:
-            found = True
-            self.outputs.pop(name).close()
-        if name in self.readers:
-            found = True
-            r = self.readers.pop(name)
-            r.f.close()
-        p = self.procs.pop(name, None)
-        if p is not None:
-            status = p.wait()
-        return status if found else -1
-
-    def fflush(self, name=None):
-        if name is None:
-            self.stdout.flush()
-        elif name in self.outputs:
-            self.outputs[name].flush()
-        return 0
-
-    def system(self, cmd):
-        self.stdout.flush()
-        for f in self.outputs.values():
-            f.flush()
-        return subprocess.call(to_str(cmd), shell=True)
-
-    # -- input built-ins -----------------------------------------------
-    def getline(self):
-        text = self.next_record()
-        if text is None:
-            return 0
-        self.record.set_text(text)
-        return 1
-
-    def getline_from(self, path):
-        path = to_str(path)
-        if path not in self.readers:
-            try:
-                f = open(path, encoding="utf-8", errors="surrogateescape", newline="\n")
-            except OSError:
-                return None
-            self.readers[path] = RecordReader(f)
-        return self._read_from(self.readers[path])
-
-    def getline_cmd(self, cmd):
-        cmd = to_str(cmd)
-        if cmd not in self.readers:
-            self.stdout.flush()
-            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True,
-                                 errors="surrogateescape")
-            self.procs[cmd] = p
-            self.readers[cmd] = RecordReader(p.stdout)
-        return self._read_from(self.readers[cmd])
-
-    def _read_from(self, reader):
-        text = reader.read(self.var("RS"))
-        return None if text is None else Field(text)
-
-    # -- string built-ins ----------------------------------------------
-    def matches(self, pat, s=None):
-        s = str(self.record) if s is None else to_str(s)
-        return regex(pat).search(s) is not None
-
-    def match(self, s, pat):
-        m = regex(pat).search(to_str(s))
-        self.ns["RSTART"] = m.start() + 1 if m else 0
-        self.ns["RLENGTH"] = m.end() - m.start() if m else -1
-        return self.ns["RSTART"]
-
-    @staticmethod
-    def _subst(pat, repl, text, count):
-        repl = to_str(repl)
-
-        def expand(m):
-            out, i = [], 0
-            while i < len(repl):
-                c = repl[i]
-                if c == "\\" and i + 1 < len(repl) and repl[i + 1] in "&\\":
-                    out.append(repl[i + 1])
-                    i += 1
-                elif c == "&":
-                    out.append(m.group(0))
-                else:
-                    out.append(c)
-                i += 1
-            return "".join(out)
-
-        return regex(pat).subn(expand, text, count=count)
-
-    def _sub(self, pat, repl, target, count):
-        if target is None:
-            new, n = self._subst(pat, repl, str(self.record), count)
-            if n:
-                self.record[0] = new
-            return n
-        return Field(self._subst(pat, repl, to_str(target), count)[0])
-
-    def sub(self, pat, repl, target=None):
-        """Replace the first match.  Returns the count when working on $0,
-        otherwise the new string for ``target``."""
-        return self._sub(pat, repl, target, 1)
-
-    def gsub(self, pat, repl, target=None):
-        return self._sub(pat, repl, target, 0)
-
-    def split(self, s, sep=None):
-        sep = self.var("FS") if sep is None else to_str(sep)
-        return [Field(x) for x in split_text(to_str(s), sep)]
-
-    def length(self, x=None):
-        if x is None:
-            return len(str(self.record))
-        if isinstance(x, (list, dict, tuple, set)):
-            return len(x)
-        return len(to_str(x, self.var("OFMT")))
-
-    @staticmethod
-    def substr(s, m, n=None):
-        s = to_str(s)
-        start = round(to_num(m))
-        end = len(s) + 1 if n is None else start + round(to_num(n))
-        start, end = max(start, 1), min(end, len(s) + 1)
-        return Field(s[start - 1:end - 1]) if end > start else Field("")
-
-    @staticmethod
-    def index(s, t):
-        return to_str(s).find(to_str(t)) + 1
-
-    def srand(self, seed=None):
-        prev, self._seed = self._seed, int(time.time()) if seed is None else to_num(seed)
-        random.seed(self._seed)
-        return prev
+        sep = self.var("OFS") if sep is None else sep
+        end = self.var("ORS") if end is None else end
+        text = sep.join(to_str(a, ofmt) for a in args) if args else self.record.text
+        (self.stdout if file is None else file).write(text + end)
 
     def _exit(self, code=None):
         raise Exit(None if code is None else int(to_num(code)))
@@ -549,19 +355,7 @@ class Runtime:
         raise NextFile()
 
     def _install_builtins(self):
-        ns = self.ns
-        ns.update({
-            "print": self.print_, "printf": self.printf, "sprintf": self.sprintf,
-            "length": self.length, "substr": self.substr, "index": self.index,
-            "split": self.split, "match": self.match, "matches": self.matches,
-            "sub": self.sub, "gsub": self.gsub,
-            "tolower": lambda s: Field(to_str(s).lower()),
-            "toupper": lambda s: Field(to_str(s).upper()),
-            "num": to_num, "str": to_str,
-            "rand": random.random, "srand": self.srand,
-            "system": self.system, "close": self.close, "fflush": self.fflush,
-            "getline": self.getline, "getline_from": self.getline_from,
-            "getline_cmd": self.getline_cmd,
-            "next": self._next, "nextfile": self._nextfile, "exit": self._exit,
-            "math": math, "re": re, "os": os, "sys": sys,
+        self.ns.update({
+            "print": self.print_, "next": self._next, "nextfile": self._nextfile,
+            "exit": self._exit, "math": math, "re": re, "os": os, "sys": sys,
         })

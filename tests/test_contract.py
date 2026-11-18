@@ -198,9 +198,9 @@ class TestVariables:
     def test_ofmt(self, run_awk):
         assert run_awk("BEGIN { OFMT = '%.2f'; print(3.14159, 2.0, 7) }") == "3.14 2 7\n"
 
-    def test_rstart_rlength_default_and_after_match(self, run_awk):
-        assert run_awk("BEGIN { print(RSTART, RLENGTH); match('xxabc', 'ab'); "
-                       "print(RSTART, RLENGTH) }") == "0 -1\n3 2\n"
+    def test_no_awk_functions_are_defined(self, run_awk):
+        prog = "BEGIN { print([n in globals() for n in ('length', 'substr', 'gsub', 'RSTART')]) }"
+        assert run_awk(prog) == "[False, False, False, False]\n"
 
     def test_user_variables_persist_between_records(self, run_awk):
         assert run_awk("{ n = (n if 'n' in globals() else 0) + 1 }\nEND{print(n)}",
@@ -239,8 +239,8 @@ class TestPatterns:
         assert run_awk("/a/ && $2 > 1 || NR == 1", LINES) == "alpha 1\nbeta 2\ngamma 3\n"
         assert run_awk("!($2 > 1)", LINES) == "alpha 1\n"
 
-    def test_regex_with_slash_and_posix_class(self, run_awk):
-        assert run_awk(r"/^[[:digit:]]+\/[[:digit:]]+$/", "1/2\na/b\n") == "1/2\n"
+    def test_regex_with_escaped_slash(self, run_awk):
+        assert run_awk(r"/^\d+\/\d+$/", "1/2\na/b\n") == "1/2\n"
 
     def test_range_inclusive(self, run_awk):
         assert run_awk("NR == 2, NR == 3", "1\n2\n3\n4\n") == "2\n3\n"
@@ -356,3 +356,34 @@ class TestImplicitVariables:
     def test_functions_see_implicit_globals(self, run_awk):
         prog = "def bump():\n    global n\n    n += 1\n{ bump() }\nEND { print(n) }"
         assert run_awk(prog, "a\nb\n") == "2\n"
+
+
+class TestPythonInsteadOfAwkFunctions:
+    def test_string_methods_and_len(self, run_awk):
+        assert run_awk("{ print(len($1), $1.upper(), $1[1:3], $1.find('l') + 1) }",
+                       "hello\n") == "5 HELLO el 3\n"
+
+    def test_re_for_substitution_edits_the_record(self, run_awk):
+        assert run_awk("{ $0 = re.sub('o', '0', $0); print(NF, $0) }", "foo boo\n") == "2 f00 b00\n"
+
+    def test_re_for_a_single_field(self, run_awk):
+        assert run_awk("{ $2 = re.sub(r'\\d', '#', $2); print }", "a 123\n") == "a ###\n"
+
+    def test_split_is_str_split(self, run_awk):
+        assert run_awk("{ print(len($0.split(':'))) }", "a:b:c\n") == "3\n"
+
+    def test_formatting_with_fstrings_and_percent(self, run_awk):
+        assert run_awk("{ print(f'{F[1]:>6}|{float(F[2]):5.1f}|' + '%03d' % int($2)) }",
+                       "ab 3.14159\n") == "    ab|  3.1|003\n"
+
+    def test_print_accepts_sep_and_end(self, run_awk):
+        assert run_awk("{ print($1, $2, sep='-', end='!\\n') }", "a b\n") == "a-b!\n"
+
+    def test_print_to_a_file_object(self, run_awk, tmp_path):
+        out = tmp_path / "o"
+        run_awk(f"BEGIN {{ f = open({str(out)!r}, 'w') }}\n{{ print($1, file=f) }}\nEND {{ f.close() }}",
+                "a\nb\n")
+        assert out.read_text() == "a\nb\n"
+
+    def test_regex_pattern_uses_python_syntax(self, run_awk):
+        assert run_awk(r"/^(?:ab|cd)\d$/", "ab1\nxx\ncd2\nab\n") == "ab1\ncd2\n"

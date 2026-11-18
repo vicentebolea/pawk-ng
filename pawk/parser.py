@@ -35,6 +35,7 @@ class Rule:
         return "Rule(%s, %r)" % (self.kind, self.source)
 
 
+_INT = re.compile(r"\d+")
 _WORD = re.compile(r"[A-Za-z_]\w*")
 _NUM = re.compile(r"(?:\d|\.\d)[\w.]*")
 _WS = re.compile(r"(?:[ \t\r\f]|\\\n)+")
@@ -107,7 +108,7 @@ def tokenize(text, regex_mode=False):
             toks.append(("regex", text[i + 1:j].replace("\\/", "/")))
             i, allowed = j + 1, False
             continue
-        m = _NUM.match(text, i)
+        m = (_INT if toks and toks[-1] == ("op", "$") else _NUM).match(text, i)
         if m:
             toks.append(("num", m.group()))
             i, allowed = m.end(), False
@@ -161,7 +162,7 @@ def _dollar(toks, k):
         return "F[(%s)]" % translate(toks[k + 1:e]), e + 1
     if kind in ("word", "num"):
         code, k = t, k + 1
-        while k < len(toks) and toks[k] == ("op", "["):
+        while kind == "word" and k < len(toks) and toks[k] == ("op", "["):
             e = _group_end(toks, k)
             code += "[%s]" % translate(toks[k + 1:e])
             k = e + 1
@@ -204,8 +205,8 @@ def translate(toks):
                 continue
             out.append({"&&": " and ", "||": " or ", "!": " not "}.get(t, t))
         elif kind == "regex":
-            out.append("matches(%r)" % t)
-        elif kind == "word" and t in ("print", "printf") and _bare(toks, k, out):
+            out.append("re.search(%r, F[0])" % t)
+        elif kind == "word" and t == "print" and _bare(toks, k, out):
             e = _stmt_end(toks, k + 1)
             out.append("%s(%s)" % (t, translate(toks[k + 1:e]).strip()))
             k = e

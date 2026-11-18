@@ -40,6 +40,7 @@ def main(argv=None):
     enc = dict(encoding="utf-8", errors="surrogateescape", newline="\n")
     stdin = io.TextIOWrapper(sys.stdin.buffer, **enc)
     stdout = io.TextIOWrapper(sys.stdout.buffer, write_through=False, **enc)
+    real_stdout, sys.stdout = sys.stdout, stdout  # so sys.stdout.flush() works in programs
     try:
         for a in args.assigns:
             if "=" not in a:
@@ -57,6 +58,7 @@ def main(argv=None):
     except BrokenPipeError:
         return 0
     finally:
+        sys.stdout = real_stdout
         try:
             stdout.flush()
         except BrokenPipeError:
