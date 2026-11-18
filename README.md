@@ -39,6 +39,40 @@ pawk '{ n[$3] += 1 } END { print(dict(n)) }' file        # count by column
 pawk 'BEGIN { print(2 ** 10) }'                          # no input needed
 ```
 
+## `$` and `F`
+
+`$n` and `F[n]` are the same thing. Before your program runs, pawk rewrites
+every `$expr` into `F[expr]`, so use whichever reads better:
+
+| awk style | Python style | meaning |
+|---|---|---|
+| `$0` | `F[0]` | the whole line |
+| `$1`, `$2` | `F[1]`, `F[2]` | a field |
+| `$NF` | `F[NF]` | the last field |
+| `$(NF-1)` | `F[NF-1]` | a computed field |
+| `$i` | `F[i]` | field number held in a variable |
+| `$$1` | `F[F[1]]` | the field whose number is in field 1 |
+
+`F` is also a regular Python object, which `$` is not:
+
+```sh
+pawk '{ print(len(F)) }' file              # same as NF
+pawk '{ print(list(F)[1:]) }' file         # fields 1..NF as a list (F[0] is not included)
+pawk '{ print([f.upper() for f in F]) }' file   # iterate over the fields
+pawk '{ F[2] = "X"; print($0) }' file      # assigning rebuilds $0, just like $2 = "X"
+```
+
+Things to know:
+
+* `$` is a text rewrite, so it only works in code, not inside strings. In an
+  f-string write `F[1]`: `print(f"{F[1]:>8}")`.
+* `$` binds tightly like in awk: `$NF-1` is `F[NF]-1`, and `$1.upper()` and
+  `$1[:2]` are `F[1].upper()` and `F[1][:2]`.
+* Reading a field past `NF` gives `""`. Assigning to one extends the line.
+  Negative numbers are an error (use `$NF`, not `$-1`).
+* Fields are numeric strings: `$1 > 5` and `$1 + $2` work on numbers when the
+  text looks like one, and `$1.upper()` works as a string.
+
 ## Comprehensions
 
 Fields are Python strings, so list, dict and generator expressions work
