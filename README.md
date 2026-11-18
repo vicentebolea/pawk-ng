@@ -39,6 +39,31 @@ pawk '{ n[$3] += 1 } END { print(dict(n)) }' file        # count by column
 pawk 'BEGIN { print(2 ** 10) }'                          # no input needed
 ```
 
+## Comprehensions
+
+Fields are Python strings, so list, dict and generator expressions work
+directly on `F` (the fields of the current line):
+
+```sh
+# list comprehension: uppercase every field
+pawk '{ print([f.upper() for f in F]) }' file
+
+# generator expression: sum the numeric fields of each line
+pawk '{ print(sum(int(f) for f in F if f.is_num)) }' file
+
+# dict comprehension: field -> length
+pawk '{ print({f: len(f) for f in F}) }' file
+
+# join a comprehension: the first letter of each field
+pawk '{ print("".join(f[0] for f in F)) }' file
+
+# filter a dict built across the whole input: values that repeat
+pawk '{ n[$3] += 1 } END { print({k: v for k, v in n.items() if v > 1}) }' file
+
+# collect lines in a list, then comprehend over it at the end
+pawk 'BEGIN { rows = [] } { rows.append($0) } END { print([r.split()[0] for r in rows if "NY" in r]) }' file
+```
+
 ## Programs in a file
 
 Rules can be mixed with ordinary Python (`import`, `def`, `class`):
