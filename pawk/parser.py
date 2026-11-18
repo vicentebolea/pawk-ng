@@ -177,23 +177,6 @@ def _bare(toks, k, out):
     return not (out and out[-1].endswith(".")) and nxt not in (("op", "("), ("op", "="))
 
 
-def _stmt_end(toks, k):
-    depth = 0
-    while k < len(toks):
-        kind, t = toks[k]
-        if kind in ("nl", "comment") and depth == 0:
-            break
-        if kind == "op":
-            if t in "([{":
-                depth += 1
-            elif t in ")]}":
-                depth -= 1
-            elif t == ";" and depth == 0:
-                break
-        k += 1
-    return k
-
-
 def translate(toks):
     out, k = [], 0
     while k < len(toks):
@@ -207,10 +190,7 @@ def translate(toks):
         elif kind == "regex":
             out.append("re.search(%r, F[0])" % t)
         elif kind == "word" and t == "print" and _bare(toks, k, out):
-            e = _stmt_end(toks, k + 1)
-            out.append("print(%s)" % (translate(toks[k + 1:e]).strip() or "F[0]"))
-            k = e
-            continue
+            raise ProgramError("print is Python's print: write print(...) with parentheses")
         elif kind == "word" and t in ("next", "nextfile", "exit"):
             prev = out[-1] if out else ""
             j = _next_sig(toks, k)

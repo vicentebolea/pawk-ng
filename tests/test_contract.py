@@ -131,7 +131,7 @@ class TestVariables:
         assert run_awk("BEGIN{FS='\\t'} {print(NF, $2 == '')}", "a\t\tb\n") == "3 True\n"
 
     def test_ofs_applies_when_the_record_is_rebuilt(self, run_awk):
-        assert run_awk("BEGIN{OFS='-'} {$1 = $1; print}", "a b\nc d\n") == "a-b\nc-d\n"
+        assert run_awk("BEGIN{OFS='-'} {$1 = $1; print($0)}", "a b\nc d\n") == "a-b\nc-d\n"
 
     def test_print_is_pythons_so_ofs_ors_are_opt_in(self, run_awk):
         assert run_awk("BEGIN{OFS='-'; ORS='|'} {print($1, $2)}", "a b\n") == "a b\n"
@@ -139,22 +139,22 @@ class TestVariables:
                        "a b\n") == "a-b|"
 
     def test_assigning_field_rebuilds_with_ofs(self, run_awk):
-        assert run_awk("BEGIN{OFS=':'} {$1 = $1; print}", "a b c\n") == "a:b:c\n"
+        assert run_awk("BEGIN{OFS=':'} {$1 = $1; print($0)}", "a b c\n") == "a:b:c\n"
 
     def test_print_dollar0_does_not_rebuild_untouched_record(self, run_awk):
-        assert run_awk("BEGIN{OFS=':'} {print}", "a   b\n") == "a   b\n"
+        assert run_awk("BEGIN{OFS=':'} {print($0)}", "a   b\n") == "a   b\n"
 
     def test_assigning_nf_truncates_record(self, run_awk):
-        assert run_awk("{ NF = 2; print }", "a b c d\n") == "a b\n"
+        assert run_awk("{ NF = 2; print($0) }", "a b c d\n") == "a b\n"
 
     def test_assigning_nf_extends_record(self, run_awk):
-        assert run_awk("BEGIN{OFS=','} { NF = 4; print }", "a b\n") == "a,b,,\n"
+        assert run_awk("BEGIN{OFS=','} { NF = 4; print($0) }", "a b\n") == "a,b,,\n"
 
     def test_assigning_dollar0_resplits(self, run_awk):
         assert run_awk("{ $0 = 'x y z'; print(NF, $3) }", "a\n") == "3 z\n"
 
     def test_assigning_beyond_nf_extends(self, run_awk):
-        assert run_awk("{ $5 = 'e'; print(NF); print }", "a b\n") == "5\na b   e\n"
+        assert run_awk("{ $5 = 'e'; print(NF); print($0) }", "a b\n") == "5\na b   e\n"
 
     def test_dollar_nf_and_computed_fields(self, run_awk):
         assert run_awk("{ print($NF, $(NF-1), $(1+1)) }", "a b c\n") == "c b b\n"
@@ -201,7 +201,7 @@ class TestVariables:
         assert run_awk("{ print(repr(FILENAME)) }", "x\n") == "''\n"
 
     def test_ofmt_formats_floats_assigned_to_fields(self, run_awk):
-        assert run_awk("BEGIN { OFMT = '%.2f' } { $2 = 3.14159; $3 = 2.0; print }",
+        assert run_awk("BEGIN { OFMT = '%.2f' } { $2 = 3.14159; $3 = 2.0; print($0) }",
                        "a b c\n") == "a 3.14 2\n"
 
     def test_no_awk_functions_are_defined(self, run_awk):
@@ -307,7 +307,7 @@ class TestPython:
         assert run_awk("BEGIN { import builtins; builtins.print('real') }") == "real\n"
 
     def test_awk_style_statements(self, run_awk):
-        assert run_awk("{ print $2, $1; n = NF } END { print n }", "a b\n") == "b a\n2\n"
+        assert run_awk("{ print($2, $1); n = NF } END { print(n) }", "a b\n") == "b a\n2\n"
 
     def test_runtime_error_is_wrapped_with_context(self, status_awk):
         import pawk
@@ -372,7 +372,7 @@ class TestPythonInsteadOfAwkFunctions:
         assert run_awk("{ $0 = re.sub('o', '0', $0); print(NF, $0) }", "foo boo\n") == "2 f00 b00\n"
 
     def test_re_for_a_single_field(self, run_awk):
-        assert run_awk("{ $2 = re.sub(r'\\d', '#', $2); print }", "a 123\n") == "a ###\n"
+        assert run_awk("{ $2 = re.sub(r'\\d', '#', $2); print($0) }", "a 123\n") == "a ###\n"
 
     def test_split_is_str_split(self, run_awk):
         assert run_awk("{ print(len($0.split(':'))) }", "a:b:c\n") == "3\n"

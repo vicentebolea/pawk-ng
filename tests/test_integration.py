@@ -129,7 +129,7 @@ class TestCli:
         assert p.stdout == "0\n" and "Traceback" not in p.stderr
 
     def test_dollar_in_shell_quotes_end_to_end(self, cli):
-        assert cli("{ print $NF }", stdin="a b c\n").stdout == "c\n"
+        assert cli("{ print($NF) }", stdin="a b c\n").stdout == "c\n"
 
 
 class TestPythonIO:
@@ -201,7 +201,7 @@ class TestRealWorldPrograms:
         assert cli(prog, str(datafile)).stdout == "LA 25\nNY 65\nSF 28\n"
 
     def test_csv_to_tsv_with_header_skip(self, cli):
-        r = cli("-F,", "BEGIN { OFS = '\\t' } NR > 1 { $1 = $1; print }",
+        r = cli("-F,", "BEGIN { OFS = '\\t' } NR > 1 { $1 = $1; print($0) }",
                 stdin="h1,h2\na,b\nc,d\n")
         assert r.stdout == "a\tb\nc\td\n"
 
@@ -212,7 +212,7 @@ class TestRealWorldPrograms:
 
     def test_dedupe_preserving_order(self, cli):
         assert cli("{ seen = globals().setdefault('seen', set()) }\n"
-                   "$0 not in seen { seen.add($0); print }",
+                   "$0 not in seen { seen.add($0); print($0) }",
                    stdin="a\nb\na\nc\nb\n").stdout == "a\nb\nc\n"
 
     def test_reverse_fields(self, cli):
@@ -225,14 +225,14 @@ class TestRealWorldPrograms:
         assert cli(prog, stdin="a B a\nb A\n").stdout == "a 3\nb 2\n"
 
     def test_gsub_in_place_then_print(self, cli):
-        assert cli("{ $0 = re.sub('o', '0', $0); print }", stdin="foo boo\n").stdout == "f00 b00\n"
+        assert cli("{ $0 = re.sub('o', '0', $0); print($0) }", stdin="foo boo\n").stdout == "f00 b00\n"
 
     def test_sub_on_field_variable(self, cli):
-        assert cli("{ $2 = re.sub('[0-9]', '#', $2); print }", stdin="a 123\n").stdout == "a ###\n"
+        assert cli("{ $2 = re.sub('[0-9]', '#', $2); print($0) }", stdin="a 123\n").stdout == "a ###\n"
 
     def test_range_extract_block(self, cli):
         text = "x\n[start]\na\nb\n[end]\ny\n"
-        assert cli("/\\[start\\]/, /\\[end\\]/ { if NR > 2 and not re.search('end', $0): print }",
+        assert cli("/\\[start\\]/, /\\[end\\]/ { if NR > 2 and not re.search('end', $0): print($0) }",
                    stdin=text).stdout == "a\nb\n"
 
     def test_empty_and_whitespace_only_lines(self, cli):
@@ -248,15 +248,15 @@ EQUIVALENT = [
     ("NR == 2, NR == 3", "NR == 2, NR == 3"),
     ("/a/ && !/o/", "/a/ && !/o/"),
     ("{ print(NF, $NF, $(NF-1)) }", "{ print NF, $NF, $(NF-1) }"),
-    ("BEGIN { OFS = '-' } { $1 = $1; print }", "BEGIN { OFS = \"-\" } { $1 = $1; print }"),
-    ("{ NF = 2; print }", "{ NF = 2; print }"),
-    ("{ $5 = 'x'; print; print NF }", "{ $5 = \"x\"; print; print NF }"),
+    ("BEGIN { OFS = '-' } { $1 = $1; print($0) }", "BEGIN { OFS = \"-\" } { $1 = $1; print }"),
+    ("{ NF = 2; print($0) }", "{ NF = 2; print }"),
+    ("{ $5 = 'x'; print($0); print(NF) }", "{ $5 = \"x\"; print; print NF }"),
     ("{ print(len($1), $1.upper(), $1[1:4], $1.find('a') + 1) }",
      "{ print length($1), toupper($1), substr($1, 2, 3), index($1, \"a\") }"),
     ("{ print('%-6s|%5.1f|%03d' % ($1, $2 / 3, int($2))) }",
      "{ printf \"%-6s|%5.1f|%03d\\n\", $1, $2 / 3, $2 }"),
-    ("{ $0 = re.sub('[aeiou]', '<\\\\g<0>>', $0); print }", "{ gsub(/[aeiou]/, \"<&>\"); print }"),
-    ("$2 > $3 || $1 < 'c' { print }", "$2 > $3 || $1 < \"c\" { print }"),
+    ("{ $0 = re.sub('[aeiou]', '<\\\\g<0>>', $0); print($0) }", "{ gsub(/[aeiou]/, \"<&>\"); print }"),
+    ("$2 > $3 || $1 < 'c' { print($0) }", "$2 > $3 || $1 < \"c\" { print }"),
     ("END { print($0, NF) }", "END { print $0, NF }"),
     ("BEGIN { print(7 // 2, 2**10, 10 % 3) }", "BEGIN { print int(7/2), 2^10, 10 % 3 }"),
     ("{ m = re.search('a+', $0); print(m.start() + 1 if m else 0) }",

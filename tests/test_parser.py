@@ -39,12 +39,18 @@ class TestTranslate:
         ("next", "next()"), ("nextfile", "nextfile()"), ("exit", "exit()"),
         ("exit 3", "exit(3)"), ("exit code", "exit(code)"), ("next()", "next()"),
         ("exit(2)", "exit(2)"), ("x.next", "x.next"), ("next = 3", "next = 3"),
-        ("print", "print(F[0])"), ("print $1, $2", "print(F[1], F[2])"),
-        ("print(1)", "print(1)"), ("printf 1", "printf 1"),
-        ("print 1; print 2", "print(1); print(2)"), ("print a, (b, c)", "print(a, (b, c))"),
+                ("print(1)", "print(1)"), ("printf 1", "printf 1"),
     ])
     def test_bare_keywords(self, src, exp):
         assert tr(src) == exp
+
+    @pytest.mark.parametrize("src", ["print", "print $1, $2", "print 1; x = 2"])
+    def test_print_without_parentheses_is_rejected(self, src):
+        with pytest.raises(ProgramError, match="print"):
+            tr(src)
+
+    def test_print_as_attribute_or_assignment_is_left_alone(self):
+        assert tr("x.print") == "x.print" and tr("print = 3") == "print = 3"
 
     def test_unbalanced_dollar(self):
         with pytest.raises(ProgramError):
