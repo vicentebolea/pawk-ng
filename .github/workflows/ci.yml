@@ -64,7 +64,9 @@ jobs:
 
   publish-testpypi:
     name: Publish dev build to TestPyPI
-    if: github.event_name == 'push'
+    # Only a push to main publishes; pull requests never do (and have no
+    # access to the publishing identity).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, lint, coverage]
     runs-on: ubuntu-latest
     environment:
