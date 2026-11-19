@@ -20,7 +20,7 @@ class ProgramError(Exception):
 
 
 class Rule:
-    __slots__ = ("kind", "pattern", "pattern2", "code", "source", "assigned", "arrays")
+    __slots__ = ("arrays", "assigned", "code", "kind", "pattern", "pattern2", "source")
 
     def __init__(self, kind, pattern=None, pattern2=None, code=None, source=""):
         self.kind = kind          # BEGIN, END, MAIN or DEF
@@ -271,7 +271,7 @@ class _Parser:
     def definition(self):
         start = self.k
         while self.k < len(self.toks):
-            kind, t = self.toks[self.k]
+            kind = self.toks[self.k][0]
             self.k += 1
             if kind == "nl":
                 nxt = self.peek()
@@ -304,7 +304,7 @@ class _Parser:
         parts, cur, depth = [], [], 0
         while True:
             kind, t = self.peek()
-            if kind == "eof" or kind == "nl" and depth == 0:
+            if kind == "eof" or (kind == "nl" and depth == 0):
                 break
             if kind == "op":
                 if t == "{" and depth == 0:

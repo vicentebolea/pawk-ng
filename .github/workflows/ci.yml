@@ -30,10 +30,42 @@ jobs:
       - name: Run tests
         run: python -m pytest -v
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ".[lint]"
+      - name: Ruff
+        run: ruff check .
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Install gawk for the differential tests
+        run: sudo apt-get update && sudo apt-get install -y gawk
+      - run: python -m pip install -e ".[test]"
+      - name: Tests with coverage (fails under the threshold in pyproject.toml)
+        run: python -m pytest --cov=pawk_ng --cov-report=term-missing --cov-report=xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
   publish-testpypi:
     name: Publish dev build to TestPyPI
     if: github.event_name == 'push'
-    needs: test
+    needs: [test, lint, coverage]
     runs-on: ubuntu-latest
     environment:
       name: testpypi

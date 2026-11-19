@@ -168,7 +168,7 @@ class TestARGVAndENVIRONBogus:
         fails(status_awk, "BEGIN { ARGV = 'file' } { print($0) }", "x\n", match="ARGV")
 
     def test_argv_number_element_is_used_as_a_file_name(self, status_awk):
-        st, out, err = status_awk("BEGIN { ARGV.append(5) } END { print(NR) }", "")
+        st, _out, err = status_awk("BEGIN { ARGV.append(5) } END { print(NR) }", "")
         assert st == 2 and "cannot open 5" in err
 
     def test_argv_none_element_is_skipped(self, run_awk):

@@ -155,6 +155,12 @@ class Field(str):
     def __rtruediv__(self, o):
         return to_num(o) / to_num(self)
 
+    def __floordiv__(self, o):
+        return to_num(self) // to_num(o)
+
+    def __rfloordiv__(self, o):
+        return to_num(o) // to_num(self)
+
     def __mod__(self, o):
         return _fmod(to_num(self), to_num(o))
 

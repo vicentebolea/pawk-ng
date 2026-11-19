@@ -10,6 +10,62 @@ pattern/action rules, ranges, `$1`/`$NF`, `NR`, `NF`, `FS`, `OFS`, ...) and use
 plain Python instead of awk's functions: `len`, `str` methods, `re`, `open`,
 your own `def`s.
 
+## Why it is interesting
+
+A pawk program is the **body of a loop you never write**. pawk reads the input,
+splits every line into fields, and runs your rules once per line, so the
+program is only the part that changes from line to line:
+
+```text
+                     what pawk runs around your code
+  ┌───────────────────────────────────────────────────────────────────┐
+  │                                                                   │
+  │   BEGIN { ... }         runs once, before any input               │
+  │        │                                                          │
+  │        ▼                                                          │
+  │   ┌─ for each line of the input ─────────────────────────────┐    │
+  │   │    NR += 1        $0 = the line        $1 $2 ... $NF     │    │
+  │   │                                                          │    │
+  │   │    pattern1 { action1 }     <- your rules, in order      │    │
+  │   │    pattern2 { action2 }                                  │    │
+  │   │    ...                                                   │    │
+  │   └──────────────────────────────────────────────────────────┘    │
+  │        │                                                          │
+  │        ▼                                                          │
+  │   END { ... }           runs once, after the last line            │
+  │                                                                   │
+  └───────────────────────────────────────────────────────────────────┘
+```
+
+The same job, written the plain Python way and the pawk way (sum the second
+column of the lines where it is greater than 28):
+
+```python
+import sys
+
+total = 0
+for line in sys.stdin:           # open, loop, split, convert: all boilerplate
+    F = line.split()
+    if int(F[1]) > 28:
+        total += int(F[1])
+print(total)
+```
+
+```sh
+pawk '$2 > 28 { total += $2 } END { print(total) }' file
+```
+
+| in the plain script | in pawk |
+|---|---|
+| `for line in sys.stdin:` | implicit: your rules are the loop body |
+| `F = line.split()` | done for you: `$1`, `$2`, `$NF`, `NF` |
+| `int(F[1]) > 28` | `$2 > 28`, fields compare as numbers when they look like numbers |
+| `total = 0` before the loop | not needed: unassigned names start as `""`/`0` |
+| code after the loop | an `END { ... }` block |
+
+You get awk's one-liner power with the whole of Python (comprehensions, `re`,
+`json`, your own functions) inside the loop body.
+
 ## Install
 
 ```sh
@@ -145,8 +201,11 @@ Options: `-F fs`, `-v var=value`, `-f progfile`, `-m module` (`from module impor
 ## Tests
 
 ```sh
-python -m pytest             # unit, contract and integration tests
+pip install -e '.[test,lint]'
+python -m pytest                            # unit, contract and integration tests
 python -m pytest -m contract
+python -m pytest --cov=pawk_ng              # with coverage (fails under 95%)
+ruff check .                                # lint
 ```
 
 The integration tests also compare against the system `gawk`/`awk` when present.

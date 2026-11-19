@@ -232,8 +232,8 @@ class Runtime:
                 f = self.stdin
             else:
                 try:
-                    f = open(arg, encoding="utf-8", errors="surrogateescape",
-                             newline="\n")
+                    f = open(arg, encoding="utf-8", errors="surrogateescape",  # noqa: SIM115
+                             newline="\n")  # closed in _close_current
                 except OSError as e:
                     self.stderr.write("pawk: cannot open %s (%s)\n" % (arg, e.strerror))
                     self.status = 2
@@ -249,6 +249,8 @@ class Runtime:
         return False
 
     def _close_current(self):
+        if self._reader is not None and self._reader.f is not self.stdin:
+            self._reader.f.close()
         self._reader = None
 
     def next_record(self):
@@ -267,7 +269,7 @@ class Runtime:
     def _guard(self, fn, rule):
         try:
             return fn()
-        except (Exit, NextRecord, NextFile, PawkError):
+        except (Exit, NextRecord, NextFile, PawkError, BrokenPipeError):
             raise
         except Exception as e:
             raise PawkError("%s: %s (in %r, record %s)" % (
@@ -307,7 +309,7 @@ class Runtime:
             try:
                 for r in self.rules:
                     if r.kind == "DEF":
-                        self._guard(lambda: exec(r.code, self.ns), r)
+                        self._guard(lambda r=r: exec(r.code, self.ns), r)
                 for r in begin:
                     self._act(r)
                 if main or end:

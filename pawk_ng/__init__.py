@@ -6,8 +6,16 @@ from .parser import ProgramError, parse
 from .runtime import Runtime
 from .values import Field, to_num, to_str
 
-__all__ = ["run", "awk", "parse", "ProgramError", "PawkError", "Field",
-           "to_num", "to_str"]
+__all__ = [
+    "Field",
+    "PawkError",
+    "ProgramError",
+    "awk",
+    "parse",
+    "run",
+    "to_num",
+    "to_str",
+]
 __version__ = "0.1.0"
 
 

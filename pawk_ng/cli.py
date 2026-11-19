@@ -1,11 +1,12 @@
 """Command line front end: ``pawk [-F fs] [-v var=val] [-f file] 'prog' [file ...]``."""
 import argparse
 import io
+import os
 import sys
 
 from . import __version__
-from .parser import ProgramError
 from .errors import PawkError
+from .parser import ProgramError
 from .runtime import Runtime
 
 
@@ -31,6 +32,15 @@ def _read_program(path):
         return f.read()
 
 
+def _silence_stdout():
+    """After a closed pipe, send what is left of stdout to /dev/null so the
+    interpreter does not complain again when it flushes at exit."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     operands = list(args.operands)
@@ -45,7 +55,7 @@ def main(argv=None):
     else:
         sys.stderr.write("pawk: no program given\n")
         return 2
-    enc = dict(encoding="utf-8", errors="surrogateescape", newline="\n")
+    enc = {"encoding": "utf-8", "errors": "surrogateescape", "newline": "\n"}
     stdin = io.TextIOWrapper(sys.stdin.buffer, **enc)
     stdout = io.TextIOWrapper(sys.stdout.buffer, write_through=False, **enc)
     try:
@@ -63,12 +73,13 @@ def main(argv=None):
         sys.stderr.write("pawk: error: %s\n" % e)
         return 2
     except BrokenPipeError:
+        _silence_stdout()
         return 0
     finally:
         try:
             stdout.flush()
         except BrokenPipeError:
-            pass
+            _silence_stdout()
 
 
 if __name__ == "__main__":

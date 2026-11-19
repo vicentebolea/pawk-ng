@@ -9,7 +9,6 @@ import re
 import shlex
 
 import pytest
-
 from conftest import ROOT
 
 README = (ROOT / "README.md").read_text()
@@ -20,6 +19,8 @@ LOG = "ERROR disk full\nINFO started\nERROR timeout\nWARN slow\n"
 
 # command exactly as written in the README -> expected stdout
 EXPECTED = {
+    "pawk '$2 > 28 { total += $2 } END { print(total) }' file":
+        "65\n",
     "pawk '{ print($1) }' file":
         'alice\nbob\ncarol\n',
     "pawk '{ print($NF, $1) }' file":
