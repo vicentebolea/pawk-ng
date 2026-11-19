@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/vicentebolea/pawk-ng/compare/v1.0.0...v2.0.0) (2026-11-19)
+
+
+### Features
+
+* trigger release 1.0.1 ([262055b](https://github.com/vicentebolea/pawk-ng/commit/262055bdde9c23b80cf384e74e7b30f4c90c0e0b))
+
+
+### BREAKING CHANGES
+
+* New release
+
 # 1.0.0 (2026-11-19)
 
 

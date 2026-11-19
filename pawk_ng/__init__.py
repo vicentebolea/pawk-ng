@@ -24,7 +24,7 @@ __all__ = [
     "to_num",
     "to_str",
 ]
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 
 def run(program, operands=(), **kw):
