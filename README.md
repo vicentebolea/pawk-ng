@@ -210,6 +210,37 @@ ruff check .                                # lint
 
 The integration tests also compare against the system `gawk`/`awk` when present.
 
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b my-new-feature`
+3. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/):
+   - `feat`: add a new feature (MINOR release)
+   - `fix`: fix a bug (PATCH release)
+   - `docs`: documentation changes only
+   - `style`: changes that don't affect code meaning (formatting, whitespace)
+   - `refactor`: code change that neither fixes a bug nor adds a feature
+   - `perf`: performance improvements
+   - `test`: adding or updating tests
+   - `build`: changes to build system or dependencies
+   - `ci`: changes to CI configuration
+   - `chore`: other changes that don't modify src or test files
+   - Adding `BREAKING CHANGE:` to the footer triggers a MAJOR release
+4. Push to the branch: `git push origin my-new-feature`
+5. Submit a pull request
+
+The commit messages drive the releases (see below), so the type matters: it
+decides whether the next version is a patch, a minor or a major one.
+
+## Semantic Versioning
+
+This project follows [Semantic Versioning](https://semver.org/).
+Releases are created automatically by [semantic-release](https://semantic-release.gitbook.io/)
+from the commit messages when commits are merged to the `release` branch: it
+picks the next version, updates the changelog, tags the release and publishes
+it to PyPI. Every push to `main` also publishes a development build
+(`<version>.devN`) to TestPyPI.
+
 ## License
 
 GPL-3.0-or-later. See `LICENSE`.
