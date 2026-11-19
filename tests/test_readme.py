@@ -7,6 +7,8 @@ a test.
 import os
 import re
 import shlex
+import subprocess
+import sys
 
 import pytest
 from conftest import ROOT
@@ -176,3 +178,70 @@ class TestDollarVersusF:
 
     def test_fields_are_numeric_strings_and_strings(self, run_awk):
         assert run_awk("{ print($1 > 5, $1 + $2, $1.upper()) }", "10 x\n") == "True 10 10\n"
+
+
+# ---------------------------------------------------------------------------
+# Every fenced block of the README is either run by a test above/below or is
+# listed here as something that cannot (or should not) be executed.
+# ---------------------------------------------------------------------------
+NOT_RUNNABLE = {
+    "pip install pawk-ng",                                   # installs from PyPI
+    "pip install -e '.[test,lint]'",                         # installs dependencies
+    "python -m pytest",                                      # this very test suite
+    "python -m pytest -m contract",
+    "python -m pytest --cov=pawk_ng",
+    "ruff check .",
+}
+
+
+def fenced_blocks():
+    return re.findall(r"```(\w*)\n(.*?)```", README, re.S)
+
+
+def plain_python_script():
+    return next(code for lang, code in fenced_blocks()
+                if lang == "python" and code.startswith("import sys"))
+
+
+def test_plain_python_comparison_script_gives_the_same_result_as_pawk(pawk, workdir):
+    script = workdir / "plain.py"
+    script.write_text(plain_python_script())
+    plain = subprocess.run([sys.executable, str(script)], input=FILE, capture_output=True,
+                           text=True, check=True).stdout
+    command = next(c for c in EXPECTED if "total" in c)
+    assert plain == pawk(command).stdout == EXPECTED[command] == "65\n"
+
+
+def test_the_readme_output_block_is_the_real_output(cli, workdir):
+    (workdir / "logs.awk").write_text(readme_program())
+    env = {**os.environ, "PYTHONPATH": str(ROOT)}
+    out = cli("-f", "logs.awk", "app.log", cwd=workdir, env=env).stdout
+    outputs = [code for lang, code in fenced_blocks() if lang == ""]
+    assert outputs == [out]
+
+
+def test_every_fenced_block_in_the_readme_is_accounted_for():
+    unknown = []
+    for lang, code in fenced_blocks():
+        if lang == "text":                       # the loop diagram
+            continue
+        if lang == "":                           # program output, checked above
+            continue
+        if lang == "python":
+            if code.startswith(("BEGIN { logs", "import sys")):
+                continue                         # run by the tests above
+            unknown.append(code)
+        elif lang == "sh":
+            for line in code.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                command = re.split(r"\s{2,}#", line)[0].rstrip()
+                if command in EXPECTED or "-f logs.awk" in command:
+                    continue
+                if command in NOT_RUNNABLE:
+                    continue
+                unknown.append(command)
+        else:
+            unknown.append("%s block" % lang)
+    assert unknown == [], "README examples without a test: %s" % unknown
