@@ -1,12 +1,29 @@
-"""pawk: awk's BEGIN/END/pattern-action model with Python 3 as the language."""
+"""The public face of the package: two functions and a few types.
+
+`pawk` (the command) is `cli.main`; this module is for using it from Python.
+"""
+# `run` executes a program and returns its exit status; `awk` is the same
+# with a string in and a string out, which is handy in tests and notebooks.
+# Everything else exported here is a type a caller may need to catch or
+# build: `ProgramError` for a bad program, `PawkError` for a failure while
+# running, `Field` for values that behave like awk's numeric strings.
 import io
 
+from .errors import PawkError
 from .parser import ProgramError, parse
-from .runtime import PawkError, Runtime
+from .runtime import Runtime
 from .values import Field, to_num, to_str
 
-__all__ = ["run", "awk", "parse", "ProgramError", "PawkError", "Field",
-           "to_num", "to_str"]
+__all__ = [
+    "Field",
+    "PawkError",
+    "ProgramError",
+    "awk",
+    "parse",
+    "run",
+    "to_num",
+    "to_str",
+]
 __version__ = "0.1.0"
 
 

@@ -1,11 +1,18 @@
 """Command line front end: ``pawk [-F fs] [-v var=val] [-f file] 'prog' [file ...]``."""
+# The only module that touches the process: it parses the options, reads the
+# program from the command line or from `-f` files, wraps stdin and stdout
+# so that bytes that are not valid UTF-8 survive a round trip
+# (`surrogateescape`), maps every kind of failure to a one-line message and
+# an exit status, and stays quiet when its output pipe is closed
+# (`pawk ... | head -1`).
 import argparse
 import io
+import os
 import sys
 
 from . import __version__
-from .parser import ProgramError
-from .runtime import PawkError, Runtime
+from .errors import PawkError, ProgramError
+from .runtime import Runtime
 
 
 def build_parser():
@@ -23,23 +30,39 @@ def build_parser():
     return p
 
 
+def _read_program_file(path):
+    if path == "-":
+        return sys.stdin.read()
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def _discard_rest_of_stdout():
+    """After a closed pipe, send what is left of stdout to /dev/null so the
+    interpreter does not complain again when it flushes at exit."""
+    try:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (OSError, ValueError):
+        pass
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     operands = list(args.operands)
     if args.progfiles:
         try:
-            program = "\n".join(open(f, encoding="utf-8").read() for f in args.progfiles)
-        except OSError as e:
-            sys.stderr.write("pawk: cannot read %s\n" % e.filename)
+            program = "\n".join(_read_program_file(f) for f in args.progfiles)
+        except (OSError, UnicodeDecodeError) as e:
+            sys.stderr.write("pawk: cannot read %s\n" % (getattr(e, "filename", None) or e))
             return 2
     elif operands:
         program = operands.pop(0)
     else:
         sys.stderr.write("pawk: no program given\n")
         return 2
-    enc = dict(encoding="utf-8", errors="surrogateescape", newline="\n")
-    stdin = io.TextIOWrapper(sys.stdin.buffer, **enc)
-    stdout = io.TextIOWrapper(sys.stdout.buffer, write_through=False, **enc)
+    utf8_options = {"encoding": "utf-8", "errors": "surrogateescape", "newline": "\n"}
+    stdin = io.TextIOWrapper(sys.stdin.buffer, **utf8_options)
+    stdout = io.TextIOWrapper(sys.stdout.buffer, write_through=False, **utf8_options)
     try:
         for a in args.assigns:
             if "=" not in a:
@@ -55,12 +78,13 @@ def main(argv=None):
         sys.stderr.write("pawk: error: %s\n" % e)
         return 2
     except BrokenPipeError:
+        _discard_rest_of_stdout()
         return 0
     finally:
         try:
             stdout.flush()
         except BrokenPipeError:
-            pass
+            _discard_rest_of_stdout()
 
 
 if __name__ == "__main__":

@@ -31,9 +31,9 @@ jobs:
           semantic_version: 24.2.3
           branches: release
           extra_plugins: |
-            @semantic-release/changelog@b1044e17de7be4f0bf28c82b881b501e138a1b87
-            @semantic-release/git@b39d5c6adcd2eb1f921481d8cbb3d605e629b56a
-            @semantic-release/exec@a285bc576f59c5316bca5a7320dbf4255f952ff8
+            @semantic-release/changelog@6.0.3
+            @semantic-release/git@10.0.1
+            @semantic-release/exec@7.0.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -51,7 +51,7 @@ jobs:
           ref: v${{ needs.release.outputs.version }}
           persist-credentials: false
 
-      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 

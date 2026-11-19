@@ -2,6 +2,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 tmp/
+.coverage*
+htmlcov/
+coverage.xml
+.ruff_cache/
 build/
 dist/
 .venv/

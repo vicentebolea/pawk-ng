@@ -87,11 +87,11 @@ class TestRules:
 
     def test_range(self):
         (r,) = parse("NR==2, NR==4 { x = 1 }")
-        assert r.pattern is not None and r.pattern2 is not None
+        assert r.pattern is not None and r.range_end_pattern is not None
 
     def test_range_comma_inside_call_is_not_a_range(self):
         (r,) = parse("max(1, 2) > 1 { x = 1 }")
-        assert r.pattern2 is None
+        assert r.range_end_pattern is None
 
     def test_three_part_range_rejected(self):
         with pytest.raises(ProgramError, match="exactly two"):
@@ -160,3 +160,23 @@ class TestRules:
     def test_empty_pattern_before_comma(self):
         with pytest.raises(ProgramError):
             parse(", NR==2 { x = 1 }")
+
+
+class TestRegexAtRuleStart:
+    """A /regex/ right after a closing brace or a newline is a pattern, not a division."""
+
+    @pytest.mark.parametrize("src", [
+        "{ x = 1 }\n/a/ { y = 2 }",
+        "{ x = 1 } /a/ { y = 2 }",
+        "BEGIN { x = 1 }\n/a/",
+        "$1\n/a/ { y = 1 }",
+        "{ x = 1 }; /a/ { y = 2 }",
+        "{ x = 1 }\n\n/a/, /b/ { y = 2 }",
+    ])
+    def test_regex_after_a_brace_newline_or_semicolon(self, src):
+        rules = parse(src)
+        assert len(rules) == 2 and "re.search" in rules[1].source
+
+    def test_division_inside_an_action_is_still_division(self):
+        (r,) = parse("{ x = $1 / 2\n  y = x / 3 }")
+        assert "re.search" not in r.source

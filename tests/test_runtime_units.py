@@ -4,7 +4,7 @@ import io
 import pytest
 
 import pawk_ng as pawk
-from pawk_ng.runtime import Record, RecordReader, Runtime, unescape
+from pawk_ng.runtime import RecordReader, Runtime, unescape
 
 
 def reader(text):

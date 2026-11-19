@@ -62,7 +62,7 @@ class TestField:
 
     def test_number_against_non_numeric_field_uses_string(self):
         assert Field("a") > 1                     # "a" > "1"
-        assert not (Field("") == 0)               # empty is not numeric
+        assert Field("") != 0                     # empty is not numeric
 
     def test_arithmetic(self):
         a, b = Field("7"), Field("2")
@@ -160,3 +160,13 @@ class TestUninit:
         assert u == "" and u == 0 and not u and u + 1 == 1 and u + "x" == "x"
         assert u < 1 and u > -1 and u == Field("0") and u != Field("a")
         assert to_num(u) == 0 and to_str(u) == ""
+
+
+class TestFloorDivisionAndUnsupportedOperators:
+    def test_floor_division_is_numeric(self):
+        assert Field("7") // Field("2") == 3 and Field("-7") // 2 == -4
+        assert 9 // Field("2") == 4 and Field("7.5") // 2 == 3.0
+
+    def test_matrix_multiplication_makes_no_sense_for_fields(self):
+        with pytest.raises(TypeError):
+            Field("1") @ Field("2")
