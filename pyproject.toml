@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pawk-ng"
-version = "0.1.0"
+version = "1.0.0"
 description = "An awk-style stream editor whose pattern/action code is Python 3"
 requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
