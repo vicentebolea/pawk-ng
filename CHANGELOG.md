@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/vicentebolea/pawk-ng/compare/v2.0.0...v2.0.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* show the README as the PyPI project description ([b217f5a](https://github.com/vicentebolea/pawk-ng/commit/b217f5a55ca2f2a2a9fcf02039a44e8daacbdf8e))
+
 # [2.0.0](https://github.com/vicentebolea/pawk-ng/compare/v1.0.0...v2.0.0) (2026-11-19)
 
 
