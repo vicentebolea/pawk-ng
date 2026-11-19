@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/pawk-ng)](https://pypi.org/project/pawk-ng/)
 [![Python versions](https://img.shields.io/pypi/pyversions/pawk-ng)](https://pypi.org/project/pawk-ng/)
 [![CI](https://github.com/vicentebolea/pawk-ng/actions/workflows/ci.yml/badge.svg)](https://github.com/vicentebolea/pawk-ng/actions/workflows/ci.yml)
-[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](https://github.com/vicentebolea/pawk-ng/blob/main/LICENSE)
 
 awk with Python as the language. You keep awk's model (`BEGIN`, `END`,
 pattern/action rules, ranges, `$1`/`$NF`, `NR`, `NF`, `FS`, `OFS`, ...) and use
@@ -243,7 +243,7 @@ it to PyPI. Every push to `main` also publishes a development build
 
 ## License
 
-GPL-3.0-or-later. See `LICENSE`.
+GPL-3.0-or-later. See [LICENSE](https://github.com/vicentebolea/pawk-ng/blob/main/LICENSE).
 
 ## Author
 

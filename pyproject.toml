@@ -6,8 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "pawk-ng"
 version = "1.0.0"
 description = "An awk-style stream editor whose pattern/action code is Python 3"
+readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
+authors = [{name = "Vicente Adolfo Bolea Sanchez"}]
+keywords = ["awk", "python", "cli", "text-processing", "stream-editor", "one-liners"]
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
@@ -19,6 +22,12 @@ classifiers = [
     "Topic :: Text Processing",
     "Environment :: Console",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vicentebolea/pawk-ng"
+Source = "https://github.com/vicentebolea/pawk-ng"
+Issues = "https://github.com/vicentebolea/pawk-ng/issues"
+Architecture = "https://github.com/vicentebolea/pawk-ng/blob/main/docs/ARCHITECTURE.md"
 
 [project.scripts]
 pawk = "pawk_ng.cli:main"
