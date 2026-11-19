@@ -3,6 +3,8 @@ import functools
 import math
 import re
 
+from .errors import PawkError
+
 _NUM_PREFIX = re.compile(r"\s*[+-]?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)")
 _NUM_FULL = re.compile(_NUM_PREFIX.pattern + r"\s*\Z")
 
@@ -190,7 +192,10 @@ def regex(pat):
         return pat
     pat = re.sub(r"\[:(\w+):\]",
                  lambda m: _POSIX_CLASSES.get(m.group(1), m.group(0)), str(pat))
-    return re.compile(pat)
+    try:
+        return re.compile(pat)
+    except re.error as e:
+        raise PawkError("invalid regular expression %r: %s" % (pat, e)) from None
 
 
 def _re_split(rx, text):

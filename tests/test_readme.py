@@ -16,7 +16,7 @@ README = (ROOT / "README.md").read_text()
 
 FILE = "alice 30 NY\nbob 25 LA\ncarol 35 NY\n"
 PASSWD = "root:x:0:0\nbob:x:1000:1000\n"
-PEOPLE = "alice 30 NY\nbob 25 LA\n# c x\ncarol 35 NY\n"
+LOG = "ERROR disk full\nINFO started\nERROR timeout\nWARN slow\n"
 
 # command exactly as written in the README -> expected stdout
 EXPECTED = {
@@ -84,13 +84,13 @@ def readme_commands():
     for block in re.findall(r"```sh\n(.*?)```", README, re.S):
         for line in block.splitlines():
             line = line.strip()
-            if line.startswith("pawk ") and "-f report.awk" not in line:
+            if line.startswith("pawk ") and "-f logs.awk" not in line:
                 cmds.append(re.split(r"\s{2,}#", line)[0].rstrip())
     return cmds
 
 
 def readme_program():
-    block = re.search(r"```python\n(def top.*?)```", README, re.S)
+    block = re.search(r"```python\n(BEGIN \{ logs.*?)```", README, re.S)
     return block.group(1)
 
 
@@ -98,7 +98,7 @@ def readme_program():
 def workdir(tmp_path):
     (tmp_path / "file").write_text(FILE)
     (tmp_path / "passwd").write_text(PASSWD)
-    (tmp_path / "people.txt").write_text(PEOPLE)
+    (tmp_path / "app.log").write_text(LOG)
     return tmp_path
 
 
@@ -125,10 +125,13 @@ def test_readme_example(pawk, command):
 
 
 def test_program_file_example(cli, workdir):
-    (workdir / "report.awk").write_text(readme_program())
+    (workdir / "logs.awk").write_text(readme_program())
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
-    r = cli("-f", "report.awk", "people.txt", cwd=workdir, env=env)
-    assert (r.returncode, r.stderr, r.stdout) == (0, "", "NY 2\nLA 1\n")
+    r = cli("-f", "logs.awk", "app.log", cwd=workdir, env=env)
+    assert (r.returncode, r.stderr) == (0, "")
+    assert r.stdout == (
+        "ERROR 2 ['disk', 'timeout']\nINFO 1 ['started']\nWARN 1 ['slow']\n")
+    assert r.stdout in README  # the output shown in the README is the real output
 
 
 class TestDollarVersusF:

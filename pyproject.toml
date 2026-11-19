@@ -8,7 +8,17 @@ version = "0.1.0"
 description = "An awk-style stream editor whose pattern/action code is Python 3"
 requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
-classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing",
+    "Environment :: Console",
+]
 
 [project.scripts]
 pawk = "pawk_ng.cli:main"

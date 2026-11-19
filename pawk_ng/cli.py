@@ -5,7 +5,8 @@ import sys
 
 from . import __version__
 from .parser import ProgramError
-from .runtime import PawkError, Runtime
+from .errors import PawkError
+from .runtime import Runtime
 
 
 def build_parser():
@@ -23,14 +24,21 @@ def build_parser():
     return p
 
 
+def _read_program(path):
+    if path == "-":
+        return sys.stdin.read()
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     operands = list(args.operands)
     if args.progfiles:
         try:
-            program = "\n".join(open(f, encoding="utf-8").read() for f in args.progfiles)
-        except OSError as e:
-            sys.stderr.write("pawk: cannot read %s\n" % e.filename)
+            program = "\n".join(_read_program(f) for f in args.progfiles)
+        except (OSError, UnicodeDecodeError) as e:
+            sys.stderr.write("pawk: cannot read %s\n" % (getattr(e, "filename", None) or e))
             return 2
     elif operands:
         program = operands.pop(0)

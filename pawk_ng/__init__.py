@@ -1,8 +1,9 @@
 """pawk: awk's BEGIN/END/pattern-action model with Python 3 as the language."""
 import io
 
+from .errors import PawkError
 from .parser import ProgramError, parse
-from .runtime import PawkError, Runtime
+from .runtime import Runtime
 from .values import Field, to_num, to_str
 
 __all__ = ["run", "awk", "parse", "ProgramError", "PawkError", "Field",

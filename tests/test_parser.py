@@ -160,3 +160,23 @@ class TestRules:
     def test_empty_pattern_before_comma(self):
         with pytest.raises(ProgramError):
             parse(", NR==2 { x = 1 }")
+
+
+class TestRegexAtRuleStart:
+    """A /regex/ right after a closing brace or a newline is a pattern, not a division."""
+
+    @pytest.mark.parametrize("src", [
+        "{ x = 1 }\n/a/ { y = 2 }",
+        "{ x = 1 } /a/ { y = 2 }",
+        "BEGIN { x = 1 }\n/a/",
+        "$1\n/a/ { y = 1 }",
+        "{ x = 1 }; /a/ { y = 2 }",
+        "{ x = 1 }\n\n/a/, /b/ { y = 2 }",
+    ])
+    def test_regex_after_a_brace_newline_or_semicolon(self, src):
+        rules = parse(src)
+        assert len(rules) == 2 and "re.search" in rules[1].source
+
+    def test_division_inside_an_action_is_still_division(self):
+        (r,) = parse("{ x = $1 / 2\n  y = x / 3 }")
+        assert "re.search" not in r.source

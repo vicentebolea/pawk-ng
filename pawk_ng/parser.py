@@ -39,7 +39,7 @@ _INT = re.compile(r"\d+")
 _WORD = re.compile(r"[A-Za-z_]\w*")
 _NUM = re.compile(r"(?:\d|\.\d)[\w.]*")
 _WS = re.compile(r"(?:[ \t\r\f]|\\\n)+")
-_REGEX_OK_AFTER = {"(", ",", "!", "&&", "||", "and", "or", "not"}
+_REGEX_OK_AFTER = {"(", ",", "!", "&&", "||", "and", "or", "not", "{", "}", ";"}
 _DEF_WORDS = ("def", "class", "import", "from", "async", "@")
 
 
@@ -91,6 +91,7 @@ def tokenize(text, regex_mode=False):
         if c == "\n":
             toks.append(("nl", c))
             i += 1
+            allowed = True  # a new line starts a statement or a rule
             continue
         if c == "#":
             j = text.find("\n", i)

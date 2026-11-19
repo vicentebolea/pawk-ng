@@ -1,5 +1,10 @@
 # pawk-ng
 
+[![PyPI](https://img.shields.io/pypi/v/pawk-ng)](https://pypi.org/project/pawk-ng/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pawk-ng)](https://pypi.org/project/pawk-ng/)
+[![CI](https://github.com/vicentebolea/pawk-ng/actions/workflows/ci.yml/badge.svg)](https://github.com/vicentebolea/pawk-ng/actions/workflows/ci.yml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+
 awk with Python as the language. You keep awk's model (`BEGIN`, `END`,
 pattern/action rules, ranges, `$1`/`$NF`, `NR`, `NF`, `FS`, `OFS`, ...) and use
 plain Python instead of awk's functions: `len`, `str` methods, `re`, `open`,
@@ -87,26 +92,30 @@ Things to know:
 
 ## Programs in a file
 
-Rules can be mixed with ordinary Python (`import`, `def`, `class`):
+Rules can be mixed with ordinary Python (`import`, `def`, `class`). This
+groups the messages of a log by severity in a dict:
 
 ```python
-def top(counts, n=3):
-    return sorted(counts.items(), key=lambda kv: -kv[1])[:n]
+BEGIN { logs = {} }
 
-BEGIN { counts = {} }
-
-$3 != "" && !/^#/ {
-    counts[$3] = counts.get($3, 0) + 1
+NF > 1 {
+    logs.setdefault($1, []).append($2)
 }
 
 END {
-    for city, n in top(counts):
-        print(city, n)
+    for severity, messages in logs.items():
+        print(severity, len(messages), messages)
 }
 ```
 
 ```sh
-pawk -f report.awk people.txt
+pawk -f logs.awk app.log
+```
+
+```
+ERROR 2 ['disk', 'timeout']
+INFO 1 ['started']
+WARN 1 ['slow']
 ```
 
 Options: `-F fs`, `-v var=value`, `-f progfile`, `-m module` (`from module import *`).

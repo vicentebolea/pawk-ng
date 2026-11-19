@@ -4,12 +4,9 @@ import os
 import re
 import sys
 
+from .errors import PawkError
 from .parser import parse
 from .values import Field, Uninit, regex, split_text, to_num, to_str
-
-
-class PawkError(Exception):
-    """A runtime failure inside a user's action or pattern."""
 
 
 class Exit(BaseException):
@@ -31,6 +28,11 @@ def unescape(s):
                                        "/": "/", '"': '"', "a": "\a", "b": "\b",
                                        "f": "\f", "v": "\v"}.get(m.group(1), m.group(0)),
                   s)
+
+
+MAX_FIELDS = 10_000_000
+_IDENT = re.compile(r"[A-Za-z_]\w*")
+_ASSIGN = re.compile(r"[A-Za-z_]\w*=")
 
 
 class Array(dict):
@@ -112,9 +114,14 @@ class Record:
                        split_text(text, rt.var("FS"), rt.var("RS") == "")]
         rt.ns["NF"] = len(self.fields)
 
-    def set_nf(self, n):
+    def _check_size(self, n):
         if n < 0:
             raise PawkError("NF cannot be negative: %d" % n)
+        if n > MAX_FIELDS:
+            raise PawkError("too many fields: %d (limit %d)" % (n, MAX_FIELDS))
+
+    def set_nf(self, n):
+        self._check_size(n)
         del self.fields[n:]
         self.fields.extend(Field("") for _ in range(n - len(self.fields)))
         self._rebuild()
@@ -142,6 +149,7 @@ class Record:
         if i == 0:
             self.set_text(value)
             return
+        self._check_size(i)
         self.fields.extend(Field("") for _ in range(i - len(self.fields)))
         self.fields[i - 1] = Field(value)
         self._rebuild()
@@ -191,26 +199,32 @@ class Runtime:
 
     # -- variables -----------------------------------------------------
     def var(self, name):
-        return to_str(self.ns[name])
+        """A variable as a plain string (never a Field, whose % is numeric)."""
+        return str(to_str(self.ns[name]))
 
     def assign(self, text):
         name, _, value = text.partition("=")
+        if not _IDENT.fullmatch(name):
+            raise PawkError("invalid variable name in assignment %r" % text)
         self.ns[name] = Field(unescape(value))
 
     def sync_nf(self):
         n = int(to_num(self.ns["NF"]))
+        self.ns["NF"] = n
         if n != len(self.record.fields):
             self.record.set_nf(n)
 
     # -- input ---------------------------------------------------------
     def _open_next(self):
         argv = self.ns["ARGV"]
+        if not isinstance(argv, (list, tuple)):
+            raise PawkError("ARGV must be a list, not %s" % type(argv).__name__)
         while self._argi < len(argv):
             arg = to_str(argv[self._argi])
             self._argi += 1
             if arg == "":
                 continue
-            if re.match(r"[A-Za-z_]\w*=", arg):
+            if _ASSIGN.match(arg):
                 self.assign(arg)
                 continue
             self._used_input = True
@@ -282,6 +296,7 @@ class Runtime:
             print(self.record.text, file=self.stdout)
         else:
             self._guard(lambda: exec(rule.code, self.ns), rule)
+            self._guard(self.sync_nf, rule)  # apply an NF assignment now
 
     def run(self):
         begin = [r for r in self.rules if r.kind == "BEGIN"]
