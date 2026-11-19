@@ -87,11 +87,11 @@ class TestRules:
 
     def test_range(self):
         (r,) = parse("NR==2, NR==4 { x = 1 }")
-        assert r.pattern is not None and r.pattern2 is not None
+        assert r.pattern is not None and r.range_end_pattern is not None
 
     def test_range_comma_inside_call_is_not_a_range(self):
         (r,) = parse("max(1, 2) > 1 { x = 1 }")
-        assert r.pattern2 is None
+        assert r.range_end_pattern is None
 
     def test_three_part_range_rejected(self):
         with pytest.raises(ProgramError, match="exactly two"):

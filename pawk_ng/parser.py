@@ -1,369 +1,238 @@
-"""Parse an awk-shaped program whose patterns and actions are Python.
+"""Stage 3: turn program text into a list of rules.
 
     BEGIN { python statements }
     pattern { python statements }
     /regex/, $1 == "stop" { ... }
     END { ... }
     def helper(x): ...            # top-level Python definitions
-
-The source is tokenized just enough to find rule boundaries and to rewrite
-the few awk-isms that are not valid Python: ``$expr`` (field access),
-``&&``, ``||``, ``!``, ``/regex/`` patterns and bare ``next``/``exit``.
 """
+# A *rule* is the unit the interpreter runs.  This module is the only place
+# that knows awk's rule grammar; it leans on the lexer to find boundaries and
+# on the translator to turn each piece into Python, then hands the pieces to
+# `compile()`.
+#
+# The grammar, in full:
+#
+#     program    := item*
+#     item       := definition | "BEGIN" body | "END" body | rule
+#     definition := a top-level `def`, `class`, `import`, `from`, `async`
+#                   or decorator, plus the indented lines that follow it
+#     rule       := [pattern ["," pattern]] [body]
+#     body       := "{" python statements "}"
+#
+# A rule without a pattern runs for every record; a rule without a body
+# prints the record; two patterns make a range.
 import ast
-import re
 import textwrap
+from dataclasses import dataclass
+
+from .errors import ProgramError
+from .lexer import index_of_closing_bracket, index_of_next_significant, tokenize
+from .translate import translate
+
+__all__ = ["ProgramError", "Rule", "find_implicit_names", "parse", "tokenize", "translate"]
+
+_KEYWORDS_THAT_START_A_DEFINITION = ("def", "class", "import", "from", "async", "@")
 
 
-class ProgramError(Exception):
-    """Raised for a syntactically invalid program."""
-
-
+@dataclass(slots=True, repr=False)
 class Rule:
-    __slots__ = ("arrays", "assigned", "code", "kind", "pattern", "pattern2", "source")
+    """One rule of the program, already compiled."""
 
-    def __init__(self, kind, pattern=None, pattern2=None, code=None, source=""):
-        self.kind = kind          # BEGIN, END, MAIN or DEF
-        self.pattern = pattern    # compiled eval code, or None
-        self.pattern2 = pattern2  # second pattern of a range rule
-        self.code = code          # compiled exec code, None means "print $0"
-        self.source = source
-        # filled in by parse(): names assigned / subscripted anywhere in the program
-        self.assigned = self.arrays = frozenset()
+    kind: str                      # BEGIN, END, MAIN or DEF
+    pattern: object = None         # compiled eval code, or None (always runs)
+    range_end_pattern: object = None  # second pattern of a range rule
+    code: object = None            # compiled exec code, None means "print $0"
+    source: str = ""               # translated source, for error messages
+    # Names assigned / subscripted anywhere in the *whole* program; filled in
+    # by `parse` so the interpreter can create awk's implicit variables.
+    assigned_names: frozenset = frozenset()
+    array_names: frozenset = frozenset()
 
     def __repr__(self):
         return "Rule(%s, %r)" % (self.kind, self.source)
 
 
-_INT = re.compile(r"\d+")
-_WORD = re.compile(r"[A-Za-z_]\w*")
-_NUM = re.compile(r"(?:\d|\.\d)[\w.]*")
-_WS = re.compile(r"(?:[ \t\r\f]|\\\n)+")
-_REGEX_OK_AFTER = {"(", ",", "!", "&&", "||", "and", "or", "not", "{", "}", ";"}
-_DEF_WORDS = ("def", "class", "import", "from", "async", "@")
+def _dedent_action_body(body):
+    """Remove the common indentation of a multi-line action body.
 
-
-def _string_end(text, i):
-    q = text[i]
-    quote = q * 3 if text.startswith(q * 3, i) else q
-    j = i + len(quote)
-    while j < len(text):
-        if text[j] == "\\":
-            j += 2
-        elif text.startswith(quote, j):
-            return j + len(quote)
-        elif len(quote) == 1 and text[j] == "\n":
-            break
-        else:
-            j += 1
-    raise ProgramError("unterminated string: %s" % text[i:i + 20].split("\n")[0])
-
-
-def _regex_end(text, i):
-    """Index of the closing '/' of the regex literal starting at ``i``."""
-    j, in_br = i + 1, False
-    while j < len(text) and text[j] != "\n":
-        c = text[j]
-        if c == "\\":
-            j += 1
-        elif c == "[":
-            in_br = True
-        elif c == "]":
-            in_br = False
-        elif c == "/" and not in_br:
-            return j
-        j += 1
-    raise ProgramError("unterminated regular expression: %s" % text[i:i + 20])
-
-
-def tokenize(text, regex_mode=False):
-    """Return a list of (kind, text) tokens.  Concatenating the text of every
-    token except 'regex' ones gives back the input."""
-    toks, i, n = [], 0, len(text)
-    allowed = True
-    while i < n:
-        c = text[i]
-        m = _WS.match(text, i)
-        if m:
-            toks.append(("ws", m.group()))
-            i = m.end()
-            continue
-        if c == "\n":
-            toks.append(("nl", c))
-            i += 1
-            allowed = True  # a new line starts a statement or a rule
-            continue
-        if c == "#":
-            j = text.find("\n", i)
-            j = n if j < 0 else j
-            toks.append(("comment", text[i:j]))
-            i = j
-            continue
-        if c in "'\"":
-            j = _string_end(text, i)
-            toks.append(("str", text[i:j]))
-            i, allowed = j, False
-            continue
-        if c == "/" and regex_mode and allowed:
-            j = _regex_end(text, i)
-            toks.append(("regex", text[i + 1:j].replace("\\/", "/")))
-            i, allowed = j + 1, False
-            continue
-        m = (_INT if toks and toks[-1] == ("op", "$") else _NUM).match(text, i)
-        if m:
-            toks.append(("num", m.group()))
-            i, allowed = m.end(), False
-            continue
-        m = _WORD.match(text, i)
-        if m:
-            w = m.group()
-            toks.append(("word", w))
-            i, allowed = m.end(), w in _REGEX_OK_AFTER
-            continue
-        op = text[i:i + 2] if text[i:i + 2] in ("&&", "||", "!=") else c
-        toks.append(("op", op))
-        i += len(op)
-        allowed = op in _REGEX_OK_AFTER
-    return toks
-
-
-def _next_sig(toks, k):
-    k += 1
-    while k < len(toks) and toks[k][0] in ("ws", "comment"):
-        k += 1
-    return k
-
-
-def _group_end(toks, k):
-    """Index of the token closing the bracket opened at toks[k]."""
-    pairs = {"(": ")", "[": "]", "{": "}"}
-    depth = 0
-    for j in range(k, len(toks)):
-        kind, t = toks[j]
-        if kind == "op" and t in pairs:
-            depth += 1
-        elif kind == "op" and t in pairs.values():
-            depth -= 1
-            if depth == 0:
-                return j
-    raise ProgramError("unbalanced brackets")
-
-
-def _dollar(toks, k):
-    """Translate the ``$operand`` starting at toks[k]; return (code, next k)."""
-    k += 1
-    if k >= len(toks):
-        raise ProgramError("'$' needs an operand")
-    kind, t = toks[k]
-    if kind == "op" and t == "$":
-        inner, k = _dollar(toks, k - 0)
-        return "F[%s]" % inner, k
-    if kind == "op" and t == "(":
-        e = _group_end(toks, k)
-        return "F[(%s)]" % translate(toks[k + 1:e]), e + 1
-    if kind in ("word", "num"):
-        code, k = t, k + 1
-        while kind == "word" and k < len(toks) and toks[k] == ("op", "["):
-            e = _group_end(toks, k)
-            code += "[%s]" % translate(toks[k + 1:e])
-            k = e + 1
-        return "F[%s]" % code, k
-    raise ProgramError("'$' needs a field number or variable, got %r" % t)
-
-
-def _next_tok(toks, k):
-    j = _next_sig(toks, k)
-    return toks[j] if j < len(toks) else ("nl", "")
-
-
-def _bare(toks, k, out):
-    """True when the word at toks[k] is used awk-style, without a call."""
-    j = _next_sig(toks, k)
-    nxt = toks[j] if j < len(toks) else ("nl", "")
-    return not (out and out[-1].endswith(".")) and nxt not in (("op", "("), ("op", "="))
-
-
-def translate(toks):
-    out, k = [], 0
-    while k < len(toks):
-        kind, t = toks[k]
-        if kind == "op":
-            if t == "$":
-                code, k = _dollar(toks, k)
-                out.append(code)
-                continue
-            out.append({"&&": " and ", "||": " or ", "!": " not "}.get(t, t))
-        elif kind == "regex":
-            out.append("re.search(%r, F[0])" % t)
-        elif kind == "word" and t == "print" and _next_tok(toks, k) != ("op", "("):
-            raise ProgramError("print is Python's print: write print(...) with parentheses")
-        elif kind == "word" and t in ("next", "nextfile", "exit"):
-            prev = out[-1] if out else ""
-            j = _next_sig(toks, k)
-            nxt = toks[j] if j < len(toks) else ("nl", "")
-            if prev.endswith(".") or nxt == ("op", "(") or nxt == ("op", "="):
-                out.append(t)
-            elif t == "exit" and nxt[0] in ("num", "word", "str"):
-                out.append("exit(%s)" % nxt[1])
-                k = j
-            else:
-                out.append(t + "()")
-        else:
-            out.append(t)
-        k += 1
-    return "".join(out)
-
-
-def _dedent(body):
+    The first line sits right after the `{`, so it is stripped on its own."""
     if "\n" not in body:
         return body.strip()
-    first, rest = body.split("\n", 1)
-    return (first.strip() + "\n" + textwrap.dedent(rest)).strip("\n")
+    first_line, other_lines = body.split("\n", 1)
+    return (first_line.strip() + "\n" + textwrap.dedent(other_lines)).strip("\n")
 
 
-def _compile(src, mode, what, sources):
-    try:
-        sources.append((src, mode))
-        return compile(src, "<%s>" % what, mode)
-    except SyntaxError as e:
-        raise ProgramError("%s: %s (in %r)" % (what, e.msg, src.strip())) from None
+class _RuleParser:
+    """Recursive-descent reader over the token list of the whole program."""
 
+    def __init__(self, program_text):
+        self.tokens = tokenize(program_text, regex_mode=True)
+        self.position = 0
+        self.compiled_sources = []  # (python source, ast mode) of everything compiled
 
-class _Parser:
-    def __init__(self, src):
-        self.toks = tokenize(src, regex_mode=True)
-        self.src = src
-        self.k = 0
-        self.sources = []  # (python source, ast mode) of everything compiled
+    # -- cursor helpers ------------------------------------------------
+    def peek_token(self):
+        if self.position < len(self.tokens):
+            return self.tokens[self.position]
+        return ("eof", "")
 
-    def peek(self):
-        return self.toks[self.k] if self.k < len(self.toks) else ("eof", "")
+    def skip_blank_tokens(self):
+        while self.peek_token()[0] in ("ws", "nl", "comment") or (
+                self.peek_token() == ("op", ";")):
+            self.position += 1
 
-    def skip_blank(self):
-        while self.peek()[0] in ("ws", "nl", "comment") or self.peek() == ("op", ";"):
-            self.k += 1
+    def is_at_line_start(self):
+        return self.position == 0 or self.tokens[self.position - 1][0] == "nl"
 
-    def at_line_start(self):
-        return self.k == 0 or self.toks[self.k - 1][0] == "nl"
+    def next_token_is_open_brace(self):
+        following = index_of_next_significant(self.tokens, self.position)
+        return following < len(self.tokens) and self.tokens[following] == ("op", "{")
 
-    def parse(self):
+    def compile_python(self, source, mode, what):
+        """Compile translated source, remembering it for `find_implicit_names`."""
+        self.compiled_sources.append((source, mode))
+        try:
+            return compile(source, "<%s>" % what, mode)
+        except SyntaxError as error:
+            raise ProgramError(
+                "%s: %s (in %r)" % (what, error.msg, source.strip())) from None
+
+    # -- the grammar ---------------------------------------------------
+    def parse_program(self):
         rules = []
         while True:
-            self.skip_blank()
-            kind, t = self.peek()
+            self.skip_blank_tokens()
+            kind, text = self.peek_token()
             if kind == "eof":
                 return rules
-            if self.at_line_start() and (
-                    (kind == "word" and t in _DEF_WORDS) or (kind, t) == ("op", "@")):
-                rules.append(self.definition())
-            elif kind == "word" and t in ("BEGIN", "END") and self._brace_next():
-                self.k += 1
-                rules.append(self.action_rule(t))
-            elif kind == "word" and t in ("BEGIN", "END"):
-                raise ProgramError("%s requires an action" % t)
+            starts_definition = self.is_at_line_start() and (
+                (kind == "word" and text in _KEYWORDS_THAT_START_A_DEFINITION)
+                or (kind, text) == ("op", "@"))
+            if starts_definition:
+                rules.append(self.parse_definition())
+            elif kind == "word" and text in ("BEGIN", "END") and self.next_token_is_open_brace():
+                self.position += 1
+                code, source = self.parse_action_body()
+                rules.append(Rule(text, code=code, source=source))
+            elif kind == "word" and text in ("BEGIN", "END"):
+                raise ProgramError("%s requires an action" % text)
             else:
-                rules.append(self.main_rule())
+                rules.append(self.parse_rule())
 
-    def _brace_next(self):
-        j = _next_sig(self.toks, self.k)
-        return j < len(self.toks) and self.toks[j] == ("op", "{")
-
-    def definition(self):
-        start = self.k
-        while self.k < len(self.toks):
-            kind = self.toks[self.k][0]
-            self.k += 1
+    def parse_definition(self):
+        """A top-level `def`/`class`/`import`: the line and its indented block."""
+        start = self.position
+        while self.position < len(self.tokens):
+            kind = self.tokens[self.position][0]
+            self.position += 1
             if kind == "nl":
-                nxt = self.peek()
-                if nxt[0] in ("ws",) or nxt[0] == "nl":
-                    continue
-                if nxt[0] == "comment":
-                    continue
+                if self.peek_token()[0] in ("ws", "nl", "comment"):
+                    continue  # still inside the indented block
                 break
-        src = "".join(t for _, t in self.toks[start:self.k]).rstrip()
-        code = _compile(translate(tokenize(src)) + "\n", "exec", "definition", self.sources)
-        return Rule("DEF", code=code, source=src)
+        source = "".join(text for _, text in self.tokens[start:self.position]).rstrip()
+        code = self.compile_python(translate(tokenize(source)) + "\n", "exec", "definition")
+        return Rule("DEF", code=code, source=source)
 
-    def body(self):
-        """Consume '{' ... '}' and return its translated, compiled body."""
-        self.skip_blank()
-        if self.peek() != ("op", "{"):
+    def parse_action_body(self):
+        """Consume `{ ... }`; return its compiled code and translated source."""
+        self.skip_blank_tokens()
+        if self.peek_token() != ("op", "{"):
             raise ProgramError("expected '{'")
-        e = _group_end(self.toks, self.k)
-        raw = "".join(t if kd != "regex" else "/%s/" % t
-                      for kd, t in self.toks[self.k + 1:e])
-        self.k = e + 1
-        src = _dedent(translate(tokenize(raw)))
-        return _compile(src + "\n", "exec", "action", self.sources), src
+        close = index_of_closing_bracket(self.tokens, self.position)
+        # Inside an action `/` is always a division, so give regex tokens back
+        # their slashes and re-tokenize without regex mode.
+        raw_body = "".join(text if kind != "regex" else "/%s/" % text
+                           for kind, text in self.tokens[self.position + 1:close])
+        self.position = close + 1
+        source = _dedent_action_body(translate(tokenize(raw_body)))
+        return self.compile_python(source + "\n", "exec", "action"), source
 
-    def action_rule(self, kind):
-        code, src = self.body()
-        return Rule(kind, code=code, source=src)
+    def parse_rule(self):
+        """`[pattern [, pattern]] [{ body }]`."""
+        pattern_texts = self.parse_patterns()
+        code = body_source = None
+        if self.peek_token() == ("op", "{"):
+            code, body_source = self.parse_action_body()
+        compiled = [self.compile_python("(%s)" % text, "eval", "pattern")
+                    for text in pattern_texts]
+        patterns_text = ", ".join(pattern_texts)
+        return Rule(
+            "MAIN",
+            pattern=compiled[0] if compiled else None,
+            range_end_pattern=compiled[1] if len(compiled) > 1 else None,
+            code=code,
+            source=(patterns_text if body_source is None
+                    else "%s { %s }" % (patterns_text, body_source)))
 
-    def main_rule(self):
-        parts, cur, depth = [], [], 0
+    def parse_patterns(self):
+        """Read up to two comma-separated patterns, as translated Python text.
+
+        The pattern ends at the `{` of the body, a `;`, a newline or the end,
+        always outside any brackets."""
+        pattern_parts, current_pattern, depth = [], [], 0
         while True:
-            kind, t = self.peek()
+            kind, text = self.peek_token()
             if kind == "eof" or (kind == "nl" and depth == 0):
                 break
             if kind == "op":
-                if t == "{" and depth == 0:
+                if text in ("{", ";") and depth == 0:
                     break
-                if t == ";" and depth == 0:
-                    break
-                if t in "([{":
+                if text in "([{":
                     depth += 1
-                elif t in ")]}":
+                elif text in ")]}":
                     depth -= 1
-                elif t == "," and depth == 0:
-                    parts.append(cur)
-                    cur = []
-                    self.k += 1
+                elif text == "," and depth == 0:
+                    pattern_parts.append(current_pattern)
+                    current_pattern = []
+                    self.position += 1
                     continue
-            cur.append((kind, t))
-            self.k += 1
-        parts.append(cur)
-        if len(parts) > 2:
+            current_pattern.append((kind, text))
+            self.position += 1
+        pattern_parts.append(current_pattern)
+        if len(pattern_parts) > 2:
             raise ProgramError("a range pattern has exactly two parts")
-        exprs = [translate(p).strip() for p in parts]
-        if any(not e for e in exprs):
-            if len(parts) == 1 and self.peek() == ("op", "{"):
-                exprs = []
-            else:
-                raise ProgramError("empty pattern")
-        pats = [_compile("(%s)" % e, "eval", "pattern", self.sources) for e in exprs]
-        code = src = None
-        if self.peek() == ("op", "{"):
-            code, src = self.body()
-        text = ", ".join(exprs)
-        return Rule("MAIN", pats[0] if pats else None,
-                    pats[1] if len(pats) > 1 else None, code,
-                    "%s { %s }" % (text, src) if src is not None else text)
+        pattern_texts = [translate(part).strip() for part in pattern_parts]
+        if any(not text for text in pattern_texts):
+            if len(pattern_parts) == 1 and self.peek_token() == ("op", "{"):
+                return []          # no pattern at all: runs for every record
+            raise ProgramError("empty pattern")
+        return pattern_texts
 
 
-def analyze(tree):
+# ## Implicit variables
+#
+# awk programs use variables and arrays without declaring them.  Python
+# would raise `NameError`, so after compiling we ask the `ast` module which
+# names the program *assigns* and which it *subscripts*; those are the only
+# names the interpreter will create on demand (as `""`/`0` and as an empty
+# array).  A name that is never assigned stays a `NameError`, so typos are
+# still caught.
+
+def find_implicit_names(tree):
     """Return (names assigned, names used as subscripted containers)."""
-    names, arrays = set(), set()
+    assigned, subscripted = set(), set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
-            names.add(node.id)
+            assigned.add(node.id)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
-            names.update(node.names)
+            assigned.update(node.names)
         elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
-            arrays.add(node.value.id)
-    return names, arrays
+            subscripted.add(node.value.id)
+    return assigned, subscripted
 
 
-def parse(src):
+def parse(program_text):
     """Parse a program into rules.  Names the program assigns or subscripts
     are recorded on every rule: they are awk's implicit variables/arrays."""
-    parser = _Parser(src)
-    rules = parser.parse()
-    names, arrays = set(), set()
-    for code_src, mode in parser.sources:
-        n, a = analyze(ast.parse(code_src, mode=mode))
-        names |= n
-        arrays |= a
-    for r in rules:
-        r.assigned, r.arrays = frozenset(names), frozenset(arrays)
+    parser = _RuleParser(program_text)
+    rules = parser.parse_program()
+    assigned, subscripted = set(), set()
+    for source, mode in parser.compiled_sources:
+        more_assigned, more_subscripted = find_implicit_names(ast.parse(source, mode=mode))
+        assigned |= more_assigned
+        subscripted |= more_subscripted
+    for rule in rules:
+        rule.assigned_names = frozenset(assigned)
+        rule.array_names = frozenset(subscripted)
     return rules
